@@ -88,6 +88,21 @@ of each day's section. Log excerpts belong here, not in issues.
   unprogrammed by S-Boot), MCT, UFS `samsung,exynos-ufs` windows +
   SPI 157, PSCI smc ids, SYSTEM_RESET treated as unsupported with
   PMU SWRESET @0x11860400 fallback. HARDWARE-MAP.md updated.
+- **Firmware download DONE 10:38 CST** (5,259,729,313 B decrypted
+  zip). MD5 `4256abdb9bd6a333fabf3b88cd149936` — **SamMobile's
+  hash was right; SamFW's was wrong** for Samsung's own file.
+  BL + AP `.tar.md5` checksums verify (samloader-rs verify-md5).
+- **Gate 0 fully closed ~11:40 CST**: boot.img is exactly 59 MiB
+  (= sda12), header v2; base DTB extracted from offset 33519680
+  (135,192 B) and decompiled with a new in-repo tool
+  (`tools/fdt_dump.py`, dependency-free FDT dumper): **the blob
+  matches exynos9610.dts on every checked value** (GIC, timer
+  0x18cba80, MCT, UFS windows + SPI 157, PSCI). DTBO: 5 overlays,
+  all gta4xl; stock overlay confirms Himax touch (coords
+  1200×2000) and the **S-Boot framebuffer reservation
+  0xCA000000/20 MiB** — the early-display handover target.
+  Decompiled trees in `dumps/20261105-gate0/firmware-extract/`
+  (local only).
 
 ## Template for boot entries
 

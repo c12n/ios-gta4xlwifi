@@ -14,8 +14,15 @@ user, and `/sys/firmware/fdt` is root-only (0400) on stock firmware.
 from Samsung's own base device tree, `arch/arm64/boot/dts/exynos/
 exynos9610.dts` (the 9610 base is reused verbatim for the 9611;
 fetched from LineageOS android_kernel_samsung_gta4xl lineage-23.2)
-— marked ✅(dts) below. Full pack cross-check:
+— marked ✅(blob) below. Full pack cross-check:
 `research/AI-PACK-SYNTHESIS-GATE0.md`.
+**Update 2026-11-05 (final):** the stock firmware was downloaded
+from Samsung's servers (samloader-rs) and the **actual base DTB
+was extracted from boot.img and decompiled** (boot header v2, DTB
+at offset 33519680, 135192 bytes; 5 DTBO overlays alongside).
+**Every ✅(blob) value below matches the real blob exactly** —
+marked ✅(blob). Decompiled trees are kept locally under
+`dumps/20261105-gate0/firmware-extract/` (not in git).
 
 ## Identity / boot state ✅
 
@@ -33,25 +40,27 @@ fetched from LineageOS android_kernel_samsung_gta4xl lineage-23.2)
 | Item | Value | |
 | --- | --- | --- |
 | CPUs | cpu@0–3 + cpu@100–103 (clusters 0/1, MPIDR 0x0–0x3 / 0x100–0x103) | ✅ |
-| GIC | **GIC-400** (GICv2), compatible `arm,cortex-a15-gic`/`arm,cortex-a9-gic`; reg: **GICD 0x12301000/0x1000, GICC 0x12302000/0x1000, GICH 0x12304000/0x2000, GICV 0x12306000/0x2000** (note: real GICC is 8 KiB, GICC_DIR at 0x12303000 — DTS lists 4 KiB) | ✅(dts) |
-| Arch timer | `arm,armv8-timer`, **clock-frequency 26000000 (26 MHz)**, PPIs 13/14/11/10 level-low; **CNTFRQ_EL0 is NOT programmed by S-Boot** — the shim/ADT must hardcode 26 MHz (XNU defaults 24 MHz) | ✅(dts) |
-| MCT | `mct@10040000`, compatible `samsung,exynos4210-mct`, reg size 0x800, 12 IRQs | ✅(dts) |
-| PSCI | `arm,psci`, **method `smc`**; CPU_SUSPEND 0xC4000001, CPU_OFF 0x84000002, CPU_ON 0xC4000003. **SYSTEM_RESET/OFF/VERSION unsupported until proven otherwise** — reset fallback: write 1 to PMU SWRESET @0x11860400 | ✅(dts) |
+| GIC | **GIC-400** (GICv2), compatible `arm,cortex-a15-gic`/`arm,cortex-a9-gic`; reg: **GICD 0x12301000/0x1000, GICC 0x12302000/0x1000, GICH 0x12304000/0x2000, GICV 0x12306000/0x2000** (note: real GICC is 8 KiB, GICC_DIR at 0x12303000 — DTS lists 4 KiB) | ✅(blob) |
+| Arch timer | `arm,armv8-timer`, **clock-frequency 26000000 (26 MHz)**, PPIs 13/14/11/10 level-low; **CNTFRQ_EL0 is NOT programmed by S-Boot** — the shim/ADT must hardcode 26 MHz (XNU defaults 24 MHz) | ✅(blob) |
+| MCT | `mct@10040000`, compatible `samsung,exynos4210-mct`, reg size 0x800, 12 IRQs | ✅(blob) |
+| PSCI | `arm,psci`, **method `smc`**; CPU_SUSPEND 0xC4000001, CPU_OFF 0x84000002, CPU_ON 0xC4000003. **SYSTEM_RESET/OFF/VERSION unsupported until proven otherwise** — reset fallback: write 1 to PMU SWRESET @0x11860400 | ✅(blob) |
 | PMU | `arm-pmu`, `exynos-pmu`, syscon @11860000 (SWRESET at 0x11860400) | ✅ |
 
 ## Storage
 
 | Item | Value | |
 | --- | --- | --- |
-| UFS host | `ufs@0x13520000` (+ `ufs-srpmb`), compatible **`samsung,exynos-ufs`** (mainline's `exynos7-ufs` is a different binding — do not use); reg: **HCI 0x13520000/0x200, vendor 0x13521100/0x200, UniPro 0x13510000/0x8000, protector 0x13530000/0x100**; IRQ **SPI 157** (INTID 189); HCI version not in DT — read VER @0x13520008 on hw (expect 2.1); downstream quirks: PRDT byte-granular, broken REQ_LIST_CLR, 9610-specific PHY cal | ✅(dts) |
+| UFS host | `ufs@0x13520000` (+ `ufs-srpmb`), compatible **`samsung,exynos-ufs`** (mainline's `exynos7-ufs` is a different binding — do not use); reg: **HCI 0x13520000/0x200, vendor 0x13521100/0x200, UniPro 0x13510000/0x8000, protector 0x13530000/0x100**; IRQ **SPI 157** (INTID 189); HCI version not in DT — read VER @0x13520008 on hw (expect 2.1); downstream quirks: PRDT byte-granular, broken REQ_LIST_CLR, 9610-specific PHY cal | ✅(blob) |
 | Plan | Exynos UFS driver adapted from ios-galaxy-s8, addresses/quirks from this map | |
 
 ## Display / GPU / input
 
 | Item | Value | |
 | --- | --- | --- |
-| Display block | `disp_ss@0x14810000`, `decon_f@0x148B0000` (compatible `samsung,exynos9-decon`, reg 0x148B0000/0x10000, first IRQ SPI 199), `dsim@0x148E0000` | ✅ / ✅(dts) |
-| RAM (live) | Banks 0x80000000, 0xC0000000, 0xE1900000, 0x880000000 (from the live tree; base-DTS memory nodes are generic placeholders) | ✅ |
+| Display block | `disp_ss@0x14810000`, `decon_f@0x148B0000` (compatible `samsung,exynos9-decon`, reg 0x148B0000/0x10000, first IRQ SPI 199), `dsim@0x148E0000` | ✅ / ✅(blob) |
+| RAM (live) | Banks 0x80000000, 0xC0000000, 0xE1900000, 0x880000000 (from the live tree; the base blob's memory nodes are the generic 2 GiB×3 placeholders — S-Boot fixes them up per unit) | ✅ |
+| Framebuffer reservation | `framebuffer@0xCA000000`, reg 0xCA000000 size 0x1400000 (20 MiB), compatible `exynos,fb_rmem` — S-Boot's handover framebuffer (logo); the early-display target for Gates 2/4. In the DTBO overlays, not the base blob | ✅(blob) |
+| Initrd window | chosen: linux,initrd 0x84000000–0x841FFFFF (bootargs empty in blob) | ✅(blob) |
 | Panel | **Himax HX83102E** (`hx83102e`, `decon_board_hx83102e`), 1200×2000 TFT | ✅ |
 | GPU | `mali@11500000` — Mali-G72 MP3 (Bifrost); CPU rendering remains the plan (no Metal/AGX on Mali) | ✅ |
 | **Touch** | **Himax `himax_ts@0` on SPI `spi@13900000`, CS0** — touch is SPI, not I2C/HSI2C (differs from the S8 port's I2C pattern). From the board DTBO (LineageOS kernel tree): compatible `himax,hxcommon`, SPI max 7 MHz, panel coords 1200×2000, touch firmware `tsp_himax/hx83102e_gta4xl.fw` (HX83102E TDDI family, same as the panel), IRQ on GPA0-0, reset on GPG1-4 | ✅ |
@@ -104,7 +113,10 @@ fetched from LineageOS android_kernel_samsung_gta4xl lineage-23.2)
   owner clicks through SamFW, or Frija on the MSI during the
   Gate 1 session.
 - `dmesg` (blocked for the shell user on stock).
-- DT property values: **resolved 2026-11-05** from Samsung's
-  `exynos9610.dts` base tree (see the ✅(dts) rows) — the stock
-  boot image is still wanted to confirm the blob matches the
-  source, and for the restore safety net.
+- DT property values: **resolved 2026-11-05** — first from
+  Samsung's `exynos9610.dts` base tree, then **confirmed against
+  the real DTB extracted from the downloaded stock boot.img**
+  (every value identical). The downloaded package is also the
+  Gate 1 restore safety net; its zip MD5 is
+  `4256abdb9bd6a333fabf3b88cd149936` (SamMobile's listing was
+  correct; SamFW's listed hash does not match Samsung's file).
