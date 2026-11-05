@@ -1,0 +1,16 @@
+# Never commit: device backups, firmware, Apple files, build trees
+backup/
+dtb/
+recovery/
+research/ipsw-*/
+*.img
+*.simg
+*.tar
+*.ipsw
+*.dmg
+*.im4p
+xnu/out/
+shim/out/
+out/
+logs/
+.DS_Store
