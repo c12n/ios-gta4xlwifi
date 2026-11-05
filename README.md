@@ -45,7 +45,7 @@ anything:
 
 | Gate | What | State |
 | --- | --- | --- |
-| 0 | Device dumps: stock boot image, live FDT, partitions, chip IDs | **Next — awaiting device session** |
+| 0 | Device dumps: stock boot image, live FDT, partitions, chip IDs | **Mostly done 2026-11-05** — chips/partitions/build identified from the live tablet (`research/HARDWARE-MAP.md`); binary FDT + stock images still owed (need root or stock firmware) |
 | 1 | Our own code (shim) runs from the BOOT partition via Odin/Heimdall | Not started |
 | 2 | XNU early boot: framebuffer console + recoverable kernel log | Not started |
 | 3 | Exynos storage driver -> HFS+ root -> launchd | Not started |

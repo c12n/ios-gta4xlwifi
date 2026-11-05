@@ -43,13 +43,14 @@ Samsung Galaxy Tab S6 Lite Wi-Fi 2020 (SM-P610, `gta4xlwifi`).
 - CPU: 4x Cortex-A73 + 4x Cortex-A53, all ARM-designed cores (no
   custom Mongoose cluster — the S8's big-cluster problem should not
   exist here; A73 cluster power-up still needs verification).
-- PMIC / fuel gauge / charger: part numbers unknown until Gate 0
-  (Exynos 9611 platforms commonly use an S2MPS-family PMIC, but this
-  is **not** confirmed for this board — identify, don't assume).
-- Touch + S Pen: touch controller and Wacom digitizer both unknown
-  until Gate 0. S Pen is out of scope for the first stages.
-- Wi-Fi/BT chip: unknown until Gate 0 (identify from the device
-  tree / kernel config). No Samsung/Broadcom Wi-Fi driver exists in
+- PMIC / fuel gauge / charger — **identified at Gate 0
+  (2026-11-05)**: SM5713 charger + fuel gauge, S2MPB03 sub-PMIC,
+  main PMIC on the SPEEDY bus. See `research/HARDWARE-MAP.md`.
+- Touch + S Pen — **identified at Gate 0**: touch is a **Himax
+  controller over SPI** (@0x13900000), *not* the S8's HSI2C pattern;
+  S Pen is Wacom on HSI2C (out of scope for the first stages).
+- Wi-Fi/BT chip — **identified at Gate 0**: Samsung SCSC
+  ("leman_s620"). No Samsung/Broadcom Wi-Fi driver exists in
   any ios-sweet-family port.
 - GPU: Mali-G72 MP3 (Bifrost). The S8 port states the position
   plainly for its Mali-G71: it "cannot run iOS's Metal / AGX

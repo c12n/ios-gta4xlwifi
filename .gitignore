@@ -1,4 +1,5 @@
 # Never commit: device backups, firmware, Apple files, build trees
+dumps/
 backup/
 dtb/
 recovery/

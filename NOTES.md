@@ -25,6 +25,29 @@ of each day's section. Log excerpts belong here, not in issues.
 - Next: Gate 0 device dumps when the tablet is plugged into the
   owner's laptop. Nothing has been flashed; the tablet is untouched.
 
+### Gate 0 session — 2026-11-05 ~09:20 CST (dumps only, nothing flashed)
+
+- Owner plugged the tablet into the MSI laptop (Tailscale + SSH
+  verified); ADB sees **SM-P610 / gta4xlwifi** directly.
+- Owner had already unlocked: OEM unlocking on, bootloader
+  unlocked (`flash.locked=0`, vbmeta unlocked, verified boot
+  orange, Knox warranty bit 1). Build **P610XXS7FYD1**
+  (Android 13, bootloader rev 7), battery 65% charging.
+- Captured locally (never committed — serials inside): getprop,
+  kernel config, partition table (boot=sda12 59 MiB,
+  userdata=sda32 ≈52 GiB), full `/proc/device-tree` node map,
+  battery/power-supply data.
+- Chips identified from the live tree — full detail in
+  `research/HARDWARE-MAP.md`: GIC @0x12300000, UFS @0x13520000,
+  Mali-G72 @0x11500000, DECON @0x148B0000 + Himax HX83102E panel,
+  **touch = Himax on SPI @0x13900000 (not I2C)**, Wacom S Pen on
+  HSI2C, **SM5713** charger/fuel-gauge, S2MPB03 sub-PMIC, SPEEDY
+  bus, **Samsung SCSC (leman_s620) Wi-Fi/BT**, PSCI + 8 CPUs.
+- Blocked on stock (shell user): binary FDT (`/sys/firmware/fdt`
+  is 0400 root), DT property values, dmesg, stock boot/dtbo
+  images. Routes: custom-recovery session or the rev-7 stock
+  firmware package on the laptop. Gate 0 is otherwise complete.
+
 ## Template for boot entries
 
 ### Boot NNN — YYYY-MM-DD HH:MM
