@@ -7,10 +7,15 @@ this file carries only hardware facts.
 
 Legend: ✅ = read directly off the device. ◐ = node presence and
 address confirmed on-device; property values (reg ranges, IRQ
-numbers, clock rates) still to be confirmed against Samsung's
-published kernel DTS for universal9611 — property *files* under
-`/proc/device-tree` are not readable by the Android shell user,
-and `/sys/firmware/fdt` is root-only (0400) on stock firmware.
+numbers, clock rates) still to be confirmed — property *files*
+under `/proc/device-tree` are not readable by the Android shell
+user, and `/sys/firmware/fdt` is root-only (0400) on stock firmware.
+**Update 2026-11-05 (later):** most ◐ values are now ✅-sourced
+from Samsung's own base device tree, `arch/arm64/boot/dts/exynos/
+exynos9610.dts` (the 9610 base is reused verbatim for the 9611;
+fetched from LineageOS android_kernel_samsung_gta4xl lineage-23.2)
+— marked ✅(dts) below. Full pack cross-check:
+`research/AI-PACK-SYNTHESIS-GATE0.md`.
 
 ## Identity / boot state ✅
 
@@ -28,24 +33,25 @@ and `/sys/firmware/fdt` is root-only (0400) on stock firmware.
 | Item | Value | |
 | --- | --- | --- |
 | CPUs | cpu@0–3 + cpu@100–103 (clusters 0/1, MPIDR 0x0–0x3 / 0x100–0x103) | ✅ |
-| GIC | `interrupt-controller@12300000` (base 0x12300000) | ✅ base, ◐ version/reg |
-| Arch timer | `timer` node, `use-physical-timer` present, `clock-frequency` property exists — value ◐ (Exynos 9611 platform clock; confirm from DTS) | ◐ |
-| MCT | `mct@10040000` | ✅ |
-| PSCI | `psci` node present (secondary-core power-up path) | ✅ |
-| PMU | `arm-pmu`, `exynos-pmu`, syscon @11860000 | ✅ |
+| GIC | **GIC-400** (GICv2), compatible `arm,cortex-a15-gic`/`arm,cortex-a9-gic`; reg: **GICD 0x12301000/0x1000, GICC 0x12302000/0x1000, GICH 0x12304000/0x2000, GICV 0x12306000/0x2000** (note: real GICC is 8 KiB, GICC_DIR at 0x12303000 — DTS lists 4 KiB) | ✅(dts) |
+| Arch timer | `arm,armv8-timer`, **clock-frequency 26000000 (26 MHz)**, PPIs 13/14/11/10 level-low; **CNTFRQ_EL0 is NOT programmed by S-Boot** — the shim/ADT must hardcode 26 MHz (XNU defaults 24 MHz) | ✅(dts) |
+| MCT | `mct@10040000`, compatible `samsung,exynos4210-mct`, reg size 0x800, 12 IRQs | ✅(dts) |
+| PSCI | `arm,psci`, **method `smc`**; CPU_SUSPEND 0xC4000001, CPU_OFF 0x84000002, CPU_ON 0xC4000003. **SYSTEM_RESET/OFF/VERSION unsupported until proven otherwise** — reset fallback: write 1 to PMU SWRESET @0x11860400 | ✅(dts) |
+| PMU | `arm-pmu`, `exynos-pmu`, syscon @11860000 (SWRESET at 0x11860400) | ✅ |
 
 ## Storage
 
 | Item | Value | |
 | --- | --- | --- |
-| UFS host | `ufs@0x13520000` (+ `ufs-srpmb`) | ✅ base, ◐ reg/IRQ |
-| Plan | Exynos UFS driver adapted from ios-galaxy-s8, addresses from this map | |
+| UFS host | `ufs@0x13520000` (+ `ufs-srpmb`), compatible **`samsung,exynos-ufs`** (mainline's `exynos7-ufs` is a different binding — do not use); reg: **HCI 0x13520000/0x200, vendor 0x13521100/0x200, UniPro 0x13510000/0x8000, protector 0x13530000/0x100**; IRQ **SPI 157** (INTID 189); HCI version not in DT — read VER @0x13520008 on hw (expect 2.1); downstream quirks: PRDT byte-granular, broken REQ_LIST_CLR, 9610-specific PHY cal | ✅(dts) |
+| Plan | Exynos UFS driver adapted from ios-galaxy-s8, addresses/quirks from this map | |
 
 ## Display / GPU / input
 
 | Item | Value | |
 | --- | --- | --- |
-| Display block | `disp_ss@0x14810000`, `decon_f@0x148B0000`, `dsim@0x148E0000` | ✅ |
+| Display block | `disp_ss@0x14810000`, `decon_f@0x148B0000` (compatible `samsung,exynos9-decon`, reg 0x148B0000/0x10000, first IRQ SPI 199), `dsim@0x148E0000` | ✅ / ✅(dts) |
+| RAM (live) | Banks 0x80000000, 0xC0000000, 0xE1900000, 0x880000000 (from the live tree; base-DTS memory nodes are generic placeholders) | ✅ |
 | Panel | **Himax HX83102E** (`hx83102e`, `decon_board_hx83102e`), 1200×2000 TFT | ✅ |
 | GPU | `mali@11500000` — Mali-G72 MP3 (Bifrost); CPU rendering remains the plan (no Metal/AGX on Mali) | ✅ |
 | **Touch** | **Himax `himax_ts@0` on SPI `spi@13900000`, CS0** — touch is SPI, not I2C/HSI2C (differs from the S8 port's I2C pattern). From the board DTBO (LineageOS kernel tree): compatible `himax,hxcommon`, SPI max 7 MHz, panel coords 1200×2000, touch firmware `tsp_himax/hx83102e_gta4xl.fw` (HX83102E TDDI family, same as the panel), IRQ on GPA0-0, reset on GPG1-4 | ✅ |
@@ -98,7 +104,7 @@ and `/sys/firmware/fdt` is root-only (0400) on stock firmware.
   owner clicks through SamFW, or Frija on the MSI during the
   Gate 1 session.
 - `dmesg` (blocked for the shell user on stock).
-- DT property values marked ◐ above: the SoC base tree is a
-  Samsung-prebuilt DTB (the public kernel trees only carry the
-  board DTBO overlays, which this map now also mines), so base
-  values land with the stock boot image above.
+- DT property values: **resolved 2026-11-05** from Samsung's
+  `exynos9610.dts` base tree (see the ✅(dts) rows) — the stock
+  boot image is still wanted to confirm the blob matches the
+  source, and for the restore safety net.

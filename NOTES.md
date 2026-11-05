@@ -71,6 +71,24 @@ of each day's section. Log excerpts belong here, not in issues.
   for Gate 1. Nothing flashed. Odin protocol is write-only, so
   download mode yields no partition readback.
 
+### Wall protocol + firmware breakthrough — 2026-11-05 ~09:54–10:20 CST
+
+- Owner directed the AI pack (Claude Opus 5.5 Max / Gemini 3.1 Pro
+  High / DeepSeek DeepThink+Search) on both walls. Full scored
+  synthesis: `research/AI-PACK-SYNTHESIS-GATE0.md`.
+- **Firmware wall broken**: `topjohnwu/samloader-rs` v2.2.0 talks
+  to Samsung's current (Smart Switch) endpoints — check-update
+  returned the exact XAC string and the 4.9 GB package download
+  started 10:00 CST. Root causes for old samloader: UA-filter 403
+  + rotated nonce key (Claude's diagnosis, matches local evidence).
+  Gemini's Bifrost-CLI-jar claim was fabricated (404) — caught by
+  verification, not used.
+- **Base DT values resolved** from Samsung's `exynos9610.dts`
+  (LineageOS lineage-23.2): GIC-400 ranges, timer 26 MHz (CNTFRQ
+  unprogrammed by S-Boot), MCT, UFS `samsung,exynos-ufs` windows +
+  SPI 157, PSCI smc ids, SYSTEM_RESET treated as unsupported with
+  PMU SWRESET @0x11860400 fallback. HARDWARE-MAP.md updated.
+
 ## Template for boot entries
 
 ### Boot NNN — YYYY-MM-DD HH:MM
