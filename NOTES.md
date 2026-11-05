@@ -104,6 +104,32 @@ of each day's section. Log excerpts belong here, not in issues.
   Decompiled trees in `dumps/20261105-gate0/firmware-extract/`
   (local only).
 
+### Gate 1 staging — 2026-11-05 ~14:55 CST
+
+- Owner chose **TWRP-first** — but official TWRP downloads for
+  gta4xlwifi **404 on both mirrors** (the device page survives;
+  the XDA thread is closed/discontinued over /data FBE corruption
+  on OTAs). **Pivot: LineageOS recovery** — the recovery Lineage
+  itself recommends for this device; current build (23.2 nightly
+  20261031). For our use it is better anyway: recovery-side adb/dd
+  gives a scriptable flash/backup loop for boot images, no GUI.
+- Staged + sha256-verified against LineageOS's published hashes,
+  on this VM (`gate1/`) and on the MSI (`~\gate1\`):
+  `recovery.img` 71,106,560 B — **exactly** the stock recovery's
+  size and the sda13 partition size (69,440 KiB); `vbmeta.img`
+  4,096 B (Lineage's AVB chain head; flashing it alongside keeps
+  the chain coherent — the unlocked bootloader does not enforce
+  AVB, so our unsigned shim images will still boot).
+- Flash tool on the MSI: samloader-rs v2.2.0 Windows build
+  (`~\gate1-samloader\samloader.exe`), downloaded on the MSI
+  itself (the Tailscale SSH proxy breaks bulk scp transfers —
+  BlockingIOError; direct download + Get-FileHash is the route).
+- Next, with the owner present: tablet to Download Mode →
+  `samloader detect` + PIT dump (non-destructive) → flash
+  RECOVERY + VBMETA with --no-reboot → owner boots straight into
+  recovery (Power + Vol Up) before Android can restore the stock
+  recovery → partition backups → shim v0.
+
 ## Template for boot entries
 
 ### Boot NNN — YYYY-MM-DD HH:MM
