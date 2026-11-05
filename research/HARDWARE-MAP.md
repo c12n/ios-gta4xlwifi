@@ -48,7 +48,7 @@ and `/sys/firmware/fdt` is root-only (0400) on stock firmware.
 | Display block | `disp_ss@0x14810000`, `decon_f@0x148B0000`, `dsim@0x148E0000` | ✅ |
 | Panel | **Himax HX83102E** (`hx83102e`, `decon_board_hx83102e`), 1200×2000 TFT | ✅ |
 | GPU | `mali@11500000` — Mali-G72 MP3 (Bifrost); CPU rendering remains the plan (no Metal/AGX on Mali) | ✅ |
-| **Touch** | **Himax `himax_ts@0` on SPI `spi@13900000`, CS0** — touch is SPI, not I2C/HSI2C (differs from the S8 port's I2C pattern) | ✅ |
+| **Touch** | **Himax `himax_ts@0` on SPI `spi@13900000`, CS0** — touch is SPI, not I2C/HSI2C (differs from the S8 port's I2C pattern). From the board DTBO (LineageOS kernel tree): compatible `himax,hxcommon`, SPI max 7 MHz, panel coords 1200×2000, touch firmware `tsp_himax/hx83102e_gta4xl.fw` (HX83102E TDDI family, same as the panel), IRQ on GPA0-0, reset on GPG1-4 | ✅ |
 | S Pen | Wacom `wacom@56` on `hsi2c@11D40000` (addr 0x56) — out of scope for early gates | ✅ |
 | Buttons | `gpio_keys` node present | ✅ |
 
@@ -75,8 +75,30 @@ and `/sys/firmware/fdt` is root-only (0400) on stock firmware.
 
 - Binary FDT + stock `boot`/`dtbo` images: need root (custom
   recovery session) or the matching stock firmware package
-  (P610XXS7FYD1, rev 7) downloaded on the laptop — either route
-  also gives the restore-to-Android safety net for Gate 1.
+  (P610XXS7FYD1, rev 7) — either route also gives the
+  restore-to-Android safety net for Gate 1.
+  Firmware identity confirmed 2026-11-05: CSC of the tablet is
+  **XAC** (Canada), package = PDA **P610XXS7FYD1** / CSC
+  **P610OXM7FYD1** (OXM multi-CSC), ~4.9 GB. Child files (SamFW):
+  AP zip 4.41 GB, **BL zip only 2.44 MB**, CSC/HOME_CSC ~230 MB
+  each. MD5 discrepancy to resolve at download time: SamFW's XAC
+  page lists full-file MD5 `84c58e754d1a54e73f9ed473b762a20f`,
+  SamMobile lists `4256abdb9bd6a333fabf3b88cd149936` for other OXM
+  regions — trust the inner `.tar.md5` checksums after download,
+  not either page.
+  Download attempts so far: samloader's version check 403s and its
+  FUS nonce auth fails against Samsung's current servers (patched
+  the 411 Content-Length issue; nonce key derivation then breaks —
+  the tool is unmaintained against the new auth). SamFW via
+  browser (2026-11-05): firmware page loads and confirms all of
+  the above, but its download button is gated by an invisible
+  Cloudflare Turnstile that failed verification 6 times for the
+  automated browser (possibly the site's daily bot limit) — a
+  human click in the same browser may pass. Remaining routes:
+  owner clicks through SamFW, or Frija on the MSI during the
+  Gate 1 session.
 - `dmesg` (blocked for the shell user on stock).
-- DT property values marked ◐ above, cross-checked from Samsung's
-  kernel DTS.
+- DT property values marked ◐ above: the SoC base tree is a
+  Samsung-prebuilt DTB (the public kernel trees only carry the
+  board DTBO overlays, which this map now also mines), so base
+  values land with the stock boot image above.

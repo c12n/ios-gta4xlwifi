@@ -48,6 +48,29 @@ of each day's section. Log excerpts belong here, not in issues.
   images. Routes: custom-recovery session or the rev-7 stock
   firmware package on the laptop. Gate 0 is otherwise complete.
 
+### AFK session — 2026-11-05 ~09:25–09:42 CST (owner away, no flashing)
+
+- Owner approved the stock-firmware download, then went AFK.
+  Tablet's CSC read from getprop: **XAC**. Firmware package
+  confirmed: P610XXS7FYD1 / P610OXM7FYD1, Bit 7, 4.9 GB
+  (child files: AP 4.41 GB, BL 2.44 MB, CSC ~230 MB).
+- Download walls, in order: samloader version check 403;
+  samloader FUS nonce auth broken vs current Samsung servers
+  (411 Content-Length patch applied locally, then nonce key
+  derivation fails — tool unmaintained); SamFW in the browser —
+  page loads and reconfirms the package, but the download button's
+  invisible Cloudflare Turnstile failed the automated browser
+  6 times. Owner click may pass; otherwise Frija at Gate 1.
+- Board DTBO overlays mined from the LineageOS kernel tree:
+  touch = Himax hxcommon, SPI 7 MHz, 1200×2000, HX83102E fw —
+  folded into HARDWARE-MAP.md. SoC base tree is a Samsung-prebuilt
+  DTB, so base property values still wait on the stock boot image.
+- Owner put the tablet in **Download Mode**; verified from the
+  MSI: ADB gone (expected), Windows shows SAMSUNG USB CDC
+  Composite (VID_04E8/PID_685D, OK) — Odin path + drivers proven
+  for Gate 1. Nothing flashed. Odin protocol is write-only, so
+  download mode yields no partition readback.
+
 ## Template for boot entries
 
 ### Boot NNN — YYYY-MM-DD HH:MM
