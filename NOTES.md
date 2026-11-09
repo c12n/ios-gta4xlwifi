@@ -171,7 +171,16 @@ of each day's section. Log excerpts belong here, not in issues.
   and photographed: **boot CPU is A73 core 0 (MPIDR 0x0) at
   EL1; CNTFRQ_EL0 = 26,000,000** (programmed — corrects the
   Gate 0 DT-based assumption).
-- iOS 16.7.16 IPSW downloading from Apple (extraction next).
+- iOS 16.7.16 IPSW downloaded and **SHA-1 verified** against
+  ipsw.me (5606c298...). Extracted locally (never in git):
+  kernelcache IM4P-unwrapped + LZFSE-decoded (49 MB fat
+  Mach-O, reference only) and the **D22AP ADT** (186 KB,
+  parses cleanly with upstream adt.py; root compatible
+  D22AP/iPhone10,3). Unwrapper: tools/im4p.py (the dtre
+  payload is LZFSE-compressed too — decode after unwrap).
+- Loader gap analysis saved as research/GATE2-LOADER-PORT.md
+  (pushed); dreamlte loader vendored into shim/v1/ with
+  provenance (GPL-2.0 files keep their SPDX headers).
 
 ## Template for boot entries
 
