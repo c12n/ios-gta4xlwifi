@@ -178,6 +178,7 @@ of each day's section. Log excerpts belong here, not in issues.
   parses cleanly with upstream adt.py; root compatible
   D22AP/iPhone10,3). Unwrapper: tools/im4p.py (the dtre
   payload is LZFSE-compressed too — decode after unwrap).
+- Kernel source ready (2026-11-09): xnu/patches vendored (0001-0123, minus S8 0124), tools/kernel/apply-gta4xl.py applies all 15 edits with exact match counts, 0125-gta4xlwifi.patch exported (50 hunks), CI simulation passes (plain git apply parity, trees identical). .github/workflows/xnu.yml vendored: the push triggers the macos-14 build.
 - mkadt_gta4xl.py built + verified (2026-11-09): ADT 12,256 B, parses back clean; dram 0x880000000/512 MiB, 8 CPUs (A73 0x0 running + 0x1-0x3, A53 0x100-0x103), GIC offsets 0x2301000/0x2302000, vtimer INTID 30, fbcon 0xCA000000 stride 4800, UFS node; stale-value audit clean. adt.py/mkadt.py vendored from the S8 fork (tools/UPSTREAM.md).
 - Loader gap analysis saved as research/GATE2-LOADER-PORT.md
   (pushed); dreamlte loader vendored into shim/v1/ with
