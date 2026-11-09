@@ -190,6 +190,18 @@ of each day's section. Log excerpts belong here, not in issues.
   build.sh used gawk's strtonum (mawk here) — replaced with
   bash arithmetic. Next: pack.py v1 (true-size v2 repack) +
   hand-rolled dummy SWEETXNU payload for the smoke test.
+- **Smoke-test image built + verified + staged (2026-11-09):**
+  pack.py v1 repacks header v2 with true sizes (kernel =
+  loader Image 46,192 B, ramdisk = dummy payload 5,384 B,
+  dtb block carried over byte-identical — note the v2 dtb
+  section starts with a 64-byte DTBH header 0xD7B7AB1E, FDT
+  at +64). Dummy stub (shim/v1/dummy/) paints a cyan/magenta
+  checkerboard, writes DUMMYOK! at the marker, parks.
+  boot-loader-smoke.img = 192,512 B, sha256 5a70c55d...,
+  staged on the MSI (scp through the Tailscale proxy works
+  at this size; multi-MB did not). Awaiting a tablet session:
+  recovery -> flash -> photo -> recovery -> marker read-back
+  via /dev/mem (fallback: photo evidence only).
 
 ## Template for boot entries
 
