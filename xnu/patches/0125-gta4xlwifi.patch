@@ -1,0 +1,753 @@
+diff --git bsd/dev/a5xelte_touch.c bsd/dev/a5xelte_touch.c
+index 7ba309b..6f50d6e 100644
+--- a/bsd/dev/a5xelte_touch.c
++++ b/bsd/dev/a5xelte_touch.c
+@@ -12,6 +12,7 @@
+ #include <kern/sched_prim.h>
+ #include <machine/machine_routines.h>
+ #include <pexpert/pexpert.h>
++#include <pexpert/arm64/board_config.h>
+ 
+ extern vm_offset_t ml_io_map(vm_offset_t, vm_size_t);
+ extern void thread_terminate_self(void);
+@@ -618,7 +619,7 @@ a5touch_start_early(vm_offset_t nfc, vm_offset_t alive)
+ void
+ a5xelte_touch_probe(void)
+ {
+-	int enabled = 1;
++	int enabled = A5_TOUCH_DEFAULT; /* A5 touch: off on gta4xlwifi */
+ 	int log_contacts = 0;
+ 	int bus_trial = 0;
+ 	vm_offset_t alive;
+diff --git bsd/dev/sweet_sample.c bsd/dev/sweet_sample.c
+index 1b57aeb..f42f892 100644
+--- a/bsd/dev/sweet_sample.c
++++ b/bsd/dev/sweet_sample.c
+@@ -1,4 +1,4 @@
+-#if defined(ARM64_BOARD_CONFIG_SWEET)
++#if defined(ARM64_BOARD_CONFIG_SWEET) || defined(ARM64_BOARD_CONFIG_A5XELTE)
+ /*
+  * SWEET process sampler: where is a daemon stuck?
+  *
+diff --git bsd/dev/sweet_ufs.c bsd/dev/sweet_ufs.c
+index 6b926fe..ff69a57 100644
+--- a/bsd/dev/sweet_ufs.c
++++ b/bsd/dev/sweet_ufs.c
+@@ -18,7 +18,7 @@
+  * against the partition bounds again right before it is issued, so nothing
+  * outside the named partition can be written.
+  */
+-#if defined(ARM64_BOARD_CONFIG_SWEET)
++#if defined(ARM64_BOARD_CONFIG_SWEET) || defined(ARM64_BOARD_CONFIG_A5XELTE)
+ #include <sys/param.h>
+ #include <sys/systm.h>
+ #include <sys/buf.h>
+@@ -69,9 +69,37 @@ extern void sweet_usb_probe(void);
+ #define HCS_UTRLRDY     (1u << 1)
+ #define CAP_64AS        (1u << 24)              /* 64-bit DMA addressing */
+ 
++#if defined(ARM64_BOARD_CONFIG_A5XELTE)
++/*
++ * Exynos 9611 host, per the Samsung downstream driver and the S8
++ * loader-probe findings on the 8895 (same controller lineage):
++ * UTRD offsets and lengths are in bytes, PRDT entries are 16 bytes
++ * and cover at most 4 KiB, each SCSI slot needs its
++ * HCI_UTRL_NEXUS_TYPE bit, the standard HCE register reads 0 while
++ * the host runs and UTRLCLR is inverted. S-Boot leaves the device
++ * stopped: START STOP UNIT (ACTIVE) to the Device W-LUN wakes it.
++ * The 9611-specific PHY calibration lives in the vendor block the
++ * ADT node names; S-Boot has already run it.
++ */
++#define EXYNOS_UFS              1
++#define VS_UTRL_NEXUS_TYPE      0x40
++#define UFS_WLUN_DEVICE         0xd0
++#define UFS_ADT_NODE            "/gta4xlwifi-ufs"
++#define UFS_DEFAULT_PART        "userdata"
++#define PRDT_BYTES(field)       (field)
++#else
++#define UFS_ADT_NODE            "/sweet-ufs"
++#define UFS_DEFAULT_PART        "userdata"
++#define PRDT_BYTES(field)       ((field) * 16u)
++#endif
++
+ #define UFS_BLOCK       4096u
+ #define BOUNCE_SIZE     (1u << 20)
++#if defined(EXYNOS_UFS)
++#define PRDT_CHUNK      4096u                   /* HCI_TXPRDT_ENTRY_SIZE 12 */
++#else
+ #define PRDT_CHUNK      (256u << 10)            /* PRDT byte count field: 18 bits */
++#endif
+ #define PRDT_MAX        (BOUNCE_SIZE / PRDT_CHUNK)
+ #define CMD_TIMEOUT_NS  (5ull * NSEC_PER_SEC)
+ #define CMD_SPIN_NS     (50ull * NSEC_PER_USEC)
+@@ -100,6 +128,7 @@ struct ucd {
+ 
+ static struct {
+ 	vm_offset_t regs;
++	vm_offset_t vs_regs;                    /* Exynos vendor HCI registers */
+ 	vm_offset_t dma;                        /* kernel VA of the DMA allocation */
+ 	uint64_t dma_pa;
+ 	uint8_t lun;
+@@ -171,7 +200,11 @@ ufs_scsi(const uint8_t *cdb, unsigned cdb_len, uint32_t len, bool write)
+ 	utrd->dw2 = 0x0f;                       /* OCS invalid until updated */
+ 	utrd->ucdba = (uint32_t)ucd_pa;
+ 	utrd->ucdbau = (uint32_t)(ucd_pa >> 32);
++#if defined(EXYNOS_UFS)
++	utrd->resp = 512u << 16 | 512u;
++#else
+ 	utrd->resp = (512u / 4) << 16 | (512u / 4);
++#endif
+ 	if (len) {
+ 		uint32_t n = 0;
+ 		for (uint32_t done = 0; done < len; done += PRDT_CHUNK, n++) {
+@@ -180,7 +213,11 @@ ufs_scsi(const uint8_t *cdb, unsigned cdb_len, uint32_t len, bool write)
+ 			ucd->prdt[n].addr_hi = (uint32_t)((bounce_pa + done) >> 32);
+ 			ucd->prdt[n].dbc = chunk - 1;
+ 		}
++#if defined(EXYNOS_UFS)
++		utrd->prdt = 1024u << 16 | (n * (uint32_t)sizeof(ucd->prdt[0]));
++#else
+ 		utrd->prdt = (1024u / 4) << 16 | n;
++#endif
+ 	}
+ 
+ 	if (su.cache) {
+@@ -189,7 +226,7 @@ ufs_scsi(const uint8_t *cdb, unsigned cdb_len, uint32_t len, bool write)
+ 		dma_sync(DMA_UCD + offsetof(struct ucd, resp), sizeof(ucd->resp));
+ 		if (len) {
+ 			dma_clean(DMA_UCD + offsetof(struct ucd, prdt),
+-			    (utrd->prdt & 0xffff) * sizeof(ucd->prdt[0]));
++			    PRDT_BYTES(utrd->prdt & 0xffff));
+ 		}
+ 	} else {
+ 		dma_sync(DMA_UTRL, sizeof(*utrd));
+@@ -204,6 +241,9 @@ ufs_scsi(const uint8_t *cdb, unsigned cdb_len, uint32_t len, bool write)
+ 	}
+ 	__builtin_arm_dsb(0xf);
+ 
++#if defined(EXYNOS_UFS)
++	*(volatile uint32_t *)(su.vs_regs + VS_UTRL_NEXUS_TYPE) |= 1;  /* slot 0: SCSI */
++#endif
+ 	ufs_wr(REG_UTRLDBR, 1);
+ 	uint64_t deadline;
+ 	nanoseconds_to_absolutetime(CMD_TIMEOUT_NS, &deadline);
+@@ -219,7 +259,9 @@ ufs_scsi(const uint8_t *cdb, unsigned cdb_len, uint32_t len, bool write)
+ 	while (ufs_rd(REG_UTRLDBR) & 1) {
+ 		uint64_t now = mach_absolute_time();
+ 		if (now > deadline) {
++#if !defined(EXYNOS_UFS)
+ 			ufs_wr(REG_UTRLCLR, ~1u);
++#endif
+ 			printf("SWEET UFS: command 0x%02x timed out\n", cdb[0]);
+ 			return ETIMEDOUT;
+ 		}
+@@ -357,7 +399,12 @@ static int
+ ufs_take_over_host(void)
+ {
+ 	uint32_t hce = ufs_rd(REG_HCE), hcs = ufs_rd(REG_HCS);
++#if defined(EXYNOS_UFS)
++	(void)hce;
++	if (!(hcs & HCS_DP) || !(hcs & HCS_UTRLRDY)) {
++#else
+ 	if (!(hce & 1) || !(hcs & HCS_DP) || !(hcs & HCS_UTRLRDY)) {
++#endif
+ 		printf("SWEET UFS: host not ready (hce 0x%x hcs 0x%x)\n", hce, hcs);
+ 		return ENXIO;
+ 	}
+@@ -589,13 +636,17 @@ sweet_ufs_init(void)
+ 	DTEntry node;
+ 	uintptr_t const *reg = NULL;
+ 	unsigned int size = 0;
+-	char want[64] = "userdata";
++	char want[64] = UFS_DEFAULT_PART;
+ 	int error;
+ 
+-	if (SecureDTLookupEntry(NULL, "/sweet-ufs", &node) != kSuccess ||
++	if (SecureDTLookupEntry(NULL, UFS_ADT_NODE, &node) != kSuccess ||
+ 	    SecureDTGetProperty(node, "reg", (void const **)&reg, &size) != kSuccess ||
++#if defined(EXYNOS_UFS)
++	    size < 4 * sizeof(uintptr_t)) {
++#else
+ 	    size < 2 * sizeof(uintptr_t)) {
+-		printf("SWEET UFS: no /sweet-ufs node in the device tree\n");
++#endif
++		printf("SWEET UFS: no " UFS_ADT_NODE " node in the device tree\n");
+ 		return ENXIO;
+ 	}
+ 	PE_parse_boot_argn("ufsroot", want, sizeof(want));
+@@ -608,6 +659,9 @@ sweet_ufs_init(void)
+ 	su.wait = (wait == 1);
+ 
+ 	su.regs = ml_io_map(reg[0], reg[1]);
++#if defined(EXYNOS_UFS)
++	su.vs_regs = ml_io_map(reg[2], reg[3]);
++#endif
+ 	if (kmem_alloc_contig(kernel_map, &su.dma, DMA_SIZE, PAGE_MASK, 0, 0,
+ 	    KMA_DATA | KMA_ZERO | KMA_PERMANENT, VM_KERN_MEMORY_IOKIT) != KERN_SUCCESS) {
+ 		printf("SWEET UFS: no contiguous DMA memory\n");
+@@ -623,6 +677,15 @@ sweet_ufs_init(void)
+ 
+ 	lck_mtx_lock(&sweet_ufs_lock);
+ 	error = ufs_take_over_host();
++#if defined(EXYNOS_UFS)
++	if (!error) {
++		static const uint8_t ssu_active[6] = { 0x1b, 0, 0, 0, 0x10, 0 };
++		su.lun = UFS_WLUN_DEVICE;
++		error = ufs_scsi(ssu_active, sizeof(ssu_active), 0, false);
++		su.lun = 0;
++		printf("SWEET UFS: START STOP UNIT (ACTIVE) to the device W-LUN: %d\n", error);
++	}
++#endif
+ 	if (!error) {
+ 		static const uint8_t tur[6] = { 0x00 };
+ 		/* The first command after the bootloader may report a unit attention. */
+@@ -656,10 +719,12 @@ sweet_ufs_init(void)
+ 	    su.writable ? "read-write" : "read-only", su.dma_pa);
+ 	sweet_log_start();
+ 	sweet_sample_start();
++#if defined(ARM64_BOARD_CONFIG_SWEET)
+ 	/* Input drivers (HID services in iokit/Kernel/arm/hid/SweetHID.cpp). */
+ 	sweet_keys_init();
+ 	sweet_touch_init();
+ 	sweet_usb_probe();
++#endif
+ 	return 0;
+ }
+ 
+diff --git iokit/Kernel/arm/SweetFramebuffer.cpp iokit/Kernel/arm/SweetFramebuffer.cpp
+index 356ff51..de7ab54 100644
+--- a/iokit/Kernel/arm/SweetFramebuffer.cpp
++++ b/iokit/Kernel/arm/SweetFramebuffer.cpp
+@@ -48,6 +48,7 @@ extern "C" int sweet_console_muted;     /* osfmk/console/serial_console.c */
+ #include <IOKit/IOTimerEventSource.h>
+ #include <IOKit/system.h>
+ #include <pexpert/pexpert.h>
++#include <pexpert/arm64/board_config.h>
+ #include <kern/clock.h>
+ #include <sys/proc.h>
+ 
+@@ -166,10 +167,10 @@ AppleCLCD::start(IOService *provider)
+ 	/* The loader's DECON handoff scans out this physical XRGB8888 buffer.
+ 	 * It does not fill boot_args.Video, so PE_current_console is empty.
+ 	 * Keep the physical address out of the donor path. */
+-	fPhys = 0x67000000ULL;
+-	fWidth = 1080;
+-	fHeight = 1920;
+-	fRowBytes = 4320;
++	fPhys = A5_FB_PHYS;
++	fWidth = A5_FB_WIDTH;
++	fHeight = A5_FB_HEIGHT;
++	fRowBytes = A5_FB_STRIDE;
+ #else
+ 	fPhys = video.v_baseAddr;
+ 	fWidth = (uint32_t)video.v_width;
+@@ -184,7 +185,12 @@ AppleCLCD::start(IOService *provider)
+ 	PE_parse_boot_argn("sweetfb_native", &native, sizeof(native));
+ 	fLogicalW = fWidth;
+ 	fLogicalH = fHeight;
+-#if !defined(ARM64_BOARD_CONFIG_A5XELTE)
++#if defined(GTA4XL)
++	if (!native) {
++		fLogicalW = SWEET_FB_LOGICAL_W;
++		fLogicalH = SWEET_FB_LOGICAL_H;
++	}
++#elif !defined(ARM64_BOARD_CONFIG_A5XELTE)
+ 	if (!native && fWidth <= SWEET_FB_LOGICAL_W && fHeight <= SWEET_FB_LOGICAL_H) {
+ 		fLogicalW = SWEET_FB_LOGICAL_W;
+ 		fLogicalH = SWEET_FB_LOGICAL_H;
+diff --git iokit/KernelConfigTables.cpp iokit/KernelConfigTables.cpp
+index 9987f5a..d95243f 100644
+--- a/iokit/KernelConfigTables.cpp
++++ b/iokit/KernelConfigTables.cpp
+@@ -39,7 +39,7 @@ const char * gIOKernelConfigTables =
+     "     'IOClass'         = SweetPlatformExpert;"
+     "     'IOProviderClass' = IOPlatformExpertDevice;"
+ #if defined(ARM64_BOARD_CONFIG_A5XELTE)
+-    "     'IONameMatch'     = 'samsung,a5xelte';"
++    "     'IONameMatch'     = ('samsung,a5xelte', 'samsung,gta4xlwifi');"
+ #else
+     "     'IONameMatch'     = 'xiaomi,sweet';"
+ #endif
+@@ -74,7 +74,7 @@ const char * gIOKernelConfigTables =
+     "     'IOClass'         = AppleCLCD;"
+     "     'IOProviderClass' = IOPlatformDevice;"
+ #if defined(ARM64_BOARD_CONFIG_A5XELTE)
+-    "     'IONameMatch'     = 'samsung,a5xelte-display';"
++    "     'IONameMatch'     = ('samsung,a5xelte-display', 'samsung,gta4xlwifi-display');"
+ #else
+     "     'IONameMatch'     = 'sweet,display';"
+ #endif
+diff --git iokit/bsddev/IOKitBSDInit.cpp iokit/bsddev/IOKitBSDInit.cpp
+index 63a3c37..eb3c69d 100644
+--- a/iokit/bsddev/IOKitBSDInit.cpp
++++ b/iokit/bsddev/IOKitBSDInit.cpp
+@@ -795,9 +795,9 @@ IOFindBSDRoot( char * rootName, unsigned int rootNameSize,
+ 	}
+ #endif
+ 
+-#if defined(ARM64_BOARD_CONFIG_SWEET)
++#if defined(ARM64_BOARD_CONFIG_SWEET) || defined(ARM64_BOARD_CONFIG_A5XELTE)
+ //
+-//	SWEET: root on a GPT partition of the internal UFS (bsd/dev/sweet_ufs.c)
++//	SWEET / gta4xlwifi: root on a GPT partition of the internal UFS (bsd/dev/sweet_ufs.c)
+ //
+ 	if (strcmp(rdBootVar, "ufsroot0") == 0) {
+ 		extern int sweet_ufs_rootdev(dev_t *dev);
+diff --git osfmk/arm64/arm_vm_init.c osfmk/arm64/arm_vm_init.c
+index fbc383d..557485a 100644
+--- a/osfmk/arm64/arm_vm_init.c
++++ b/osfmk/arm64/arm_vm_init.c
+@@ -1905,10 +1905,17 @@ arm_vm_init(uint64_t memory_size, boot_args * args)
+ #endif
+ 
+ 	// Slide the physical aperture to a random page-aligned location within the slide range
++#if defined(GTA4XL)
++	uint64_t physmap_slide = 0;
++#else
+ 	uint64_t physmap_slide = early_random() & ARM64_PHYSMAP_SLIDE_MASK & ~((uint64_t)PAGE_MASK);
++#endif
+ 	assert(physmap_slide < ARM64_PHYSMAP_SLIDE_RANGE);
+ 
+ 	physmap_base += physmap_slide;
++#if defined(GTA4XL) && !XNU_MONITOR
++	physmap_base = ROUND_TWIG(physmap_base);
++#endif
+ 
+ #if XNU_MONITOR
+ 	physmap_base = ROUND_TWIG(physmap_base);
+@@ -2310,6 +2317,9 @@ arm_vm_init(uint64_t memory_size, boot_args * args)
+ 	va_l1 = dynamic_memory_begin;
+ 	va_l1_end = va_l1 + ((2 + (mem_segments * 10)) << 20);
+ 	va_l1_end += round_page(args->Video.v_height * args->Video.v_rowBytes);
++#if defined(GTA4XL)
++	va_l1_end += round_page((vm_size_t)A5_FB_STRIDE * A5_FB_HEIGHT) + (64ULL << 20);
++#endif
+ 	va_l1_end = (va_l1_end + 0x00000000007FFFFFULL) & 0xFFFFFFFFFF800000ULL;
+ 
+ 	cpu_l1_tte = cpu_tte + ((va_l1 & ARM_TT_L1_INDEX_MASK) >> ARM_TT_L1_SHIFT);
+diff --git osfmk/arm64/machine_routines.c osfmk/arm64/machine_routines.c
+index c5b33bd..6d56a33 100644
+--- a/osfmk/arm64/machine_routines.c
++++ b/osfmk/arm64/machine_routines.c
+@@ -2054,7 +2054,11 @@ ml_set_decrementer(uint32_t dec_value)
+ 	if (cdp->cpu_set_decrementer_func) {
+ 		cdp->cpu_set_decrementer_func(dec_value);
+ 	} else {
++#if defined(A5_USE_PHYS_TIMER)
++		__builtin_arm_wsr64("CNTP_TVAL_EL0", (uint64_t)dec_value);
++#else
+ 		__builtin_arm_wsr64("CNTV_TVAL_EL0", (uint64_t)dec_value);
++#endif
+ 	}
+ }
+ 
+@@ -2182,7 +2186,11 @@ ml_get_decrementer(void)
+ 	} else {
+ 		uint64_t wide_val;
+ 
++#if defined(A5_USE_PHYS_TIMER)
++		wide_val = __builtin_arm_rsr64("CNTP_TVAL_EL0");
++#else
+ 		wide_val = __builtin_arm_rsr64("CNTV_TVAL_EL0");
++#endif
+ 		dec = (uint32_t)wide_val;
+ 		assert(wide_val == (uint64_t)dec);
+ 	}
+@@ -2205,7 +2213,11 @@ ml_enable_monitor(void)
+ boolean_t
+ ml_get_timer_pending(void)
+ {
++#if defined(A5_USE_PHYS_TIMER)
++	uint64_t cntv_ctl = __builtin_arm_rsr64("CNTP_CTL_EL0");
++#else
+ 	uint64_t cntv_ctl = __builtin_arm_rsr64("CNTV_CTL_EL0");
++#endif
+ 	return ((cntv_ctl & CNTV_CTL_EL0_ISTATUS) != 0) ? TRUE : FALSE;
+ }
+ 
+@@ -2282,9 +2294,14 @@ _enable_virtual_timer(void)
+ {
+ 	uint64_t cntvctl = CNTV_CTL_EL0_ENABLE; /* One wants to use 32 bits, but "mrs" prefers it this way */
+ 
++#if defined(A5_USE_PHYS_TIMER)
++	__builtin_arm_wsr64("CNTP_CTL_EL0", cntvctl);   /* same ENABLE bit */
++	__builtin_arm_wsr64("CNTV_CTL_EL0", CNTV_CTL_EL0_IMASKED);
++#else
+ 	__builtin_arm_wsr64("CNTV_CTL_EL0", cntvctl);
+ 	/* disable the physical timer as a precaution, as its registers reset to architecturally unknown values */
+ 	__builtin_arm_wsr64("CNTP_CTL_EL0", CNTP_CTL_EL0_IMASKED);
++#endif
+ }
+ 
+ void
+diff --git osfmk/arm64/start.s osfmk/arm64/start.s
+index 7da26d2..1606c91 100644
+--- a/osfmk/arm64/start.s
++++ b/osfmk/arm64/start.s
+@@ -517,15 +517,15 @@ LEXT(start_first_cpu)
+ 
+ #if defined(A5XELTE)
+ 	/* Earliest XNU-owned physical marker in preserved Samsung log RAM. */
+-	MOV64	x10, 0x469ff100
++	MOV64	x10, A5_ENTRY_MARKER_PHYS
+ 	MOV64	x11, 0x3145544c45554e58
+ 	str		x11, [x10]
+ 	dsb		sy
+ 	/* XNU-owned green entry block on the Exynos DECON scanout buffer. */
+-	MOV64	x10, 0x6705d0c0
++	MOV64	x10, (A5_FB_PHYS + 88 * A5_FB_STRIDE + 240 * 4)
+ 	MOV64	x11, 0xff00ff00
+ 	mov		x12, #21
+-	mov		x15, #4320
++	mov		x15, #A5_FB_STRIDE
+ La5_entry_row:
+ 	mov		x14, x10
+ 	mov		x13, #36
+@@ -710,18 +710,18 @@ Lkernelcache_base_found:
+ 	create_bootstrap_mapping x14, x15, x5, x3, x2, x9, x10, x11, x12, x13
+ 
+ #if defined(A5XELTE)
+-	/* Five 2 MiB blocks map the 1080x1920 scanout buffer VA=PA.
++	/* A5_FB_2M_BLOCKS 2 MiB blocks map the scanout buffer VA=PA.
+ 	 * Its L1 index differs from isolated XNU RAM, so this uses one extra
+ 	 * bootstrap L2 page. Mark it write-combined for DECON DMA visibility. */
+-	MOV64	x0, 0x67000000
++	MOV64	x0, A5_FB_PHYS
+ 	mov		x4, x0
+-	mov		x5, #5
++	mov		x5, #A5_FB_2M_BLOCKS
+ 	create_bootstrap_mapping x0, x4, x5, x1, x2, x6, x10, x11, x12, x13
+-	MOV64	x10, 0x67000000
++	MOV64	x10, A5_FB_PHYS
+ 	and		x11, x10, #(ARM_TT_L2_INDEX_MASK)
+ 	lsr		x11, x11, #(ARM_TT_L2_SHIFT)
+ 	add		x12, x2, x11, lsl #TTE_SHIFT
+-	mov		x13, #5
++	mov		x13, #A5_FB_2M_BLOCKS
+ La5_fb_attr:
+ 	ldr		x11, [x12]
+ 	bic		x11, x11, #(ARM_TTE_BLOCK_ATTRINDXMASK)
+@@ -892,10 +892,10 @@ common_start:
+ 
+ #if defined(A5XELTE)
+ 	/* Blue block: the 4 KiB MMU is active and the framebuffer alias works. */
+-	MOV64	x10, 0x6707ecc0
++	MOV64	x10, (A5_FB_PHYS + 120 * A5_FB_STRIDE + 240 * 4)
+ 	MOV64	x11, 0xff0000ff
+ 	mov		x12, #21
+-	mov		x15, #4320
++	mov		x15, #A5_FB_STRIDE
+ La5_mmu_row:
+ 	mov		x14, x10
+ 	mov		x13, #36
+@@ -936,10 +936,10 @@ La5_mmu_pixel:
+ 
+ #if defined(A5XELTE)
+ 	/* fp_enabled: write directly to the DECON scanout alias. */
+-	MOV64	x10, 0x670a08c0
++	MOV64	x10, (A5_FB_PHYS + 152 * A5_FB_STRIDE + 240 * 4)
+ 	MOV64	x11, 0xff00ffff
+ 	mov	x12, #21
+-	mov	x15, #4320
++	mov	x15, #A5_FB_STRIDE
+ La5_fp_enabled_row:
+ 	mov	x14, x10
+ 	mov	x13, #36
+@@ -971,10 +971,10 @@ La5_fp_enabled_pixel:
+ 
+ #if defined(A5XELTE)
+ 	/* tunables_done: write directly to the DECON scanout alias. */
+-	MOV64	x10, 0x670c24c0
++	MOV64	x10, (A5_FB_PHYS + 184 * A5_FB_STRIDE + 240 * 4)
+ 	MOV64	x11, 0xffff00ff
+ 	mov	x12, #21
+-	mov	x15, #4320
++	mov	x15, #A5_FB_STRIDE
+ La5_tunables_done_row:
+ 	mov	x14, x10
+ 	mov	x13, #36
+@@ -1018,10 +1018,10 @@ La5_tunables_done_pixel:
+ 
+ #if defined(A5XELTE)
+ 	/* arm_init_jump: write directly to the DECON scanout alias. */
+-	MOV64	x10, 0x670e40c0
++	MOV64	x10, (A5_FB_PHYS + 216 * A5_FB_STRIDE + 240 * 4)
+ 	MOV64	x11, 0xffffff00
+ 	mov	x12, #21
+-	mov	x15, #4320
++	mov	x15, #A5_FB_STRIDE
+ La5_arm_init_jump_row:
+ 	mov	x14, x10
+ 	mov	x13, #36
+@@ -1103,8 +1103,8 @@ arm_init_tramp:
+ La5_draw_text:
+ 	adrp	x3, EXT(iso_font)@page
+ 	add	x3, x3, EXT(iso_font)@pageoff
+-	MOV64	x4, 0x67000000
+-	mov	x5, #4320
++	MOV64	x4, A5_FB_PHYS
++	mov	x5, #A5_FB_STRIDE
+ 	madd	x4, x2, x5, x4
+ 	add	x4, x4, x1, lsl #2
+ La5_text_next_char:
+@@ -1120,7 +1120,7 @@ La5_text_column:
+ 	lsl	w11, w11, w10
+ 	tst	w9, w11
+ 	b.eq	La5_text_skip_pixel
+-	mov	x13, #8640
++	mov	x13, #(2 * A5_FB_STRIDE)
+ 	madd	x12, x8, x13, x4
+ 	add	x12, x12, x10, lsl #3
+ 	mov	w14, #-1
+diff --git osfmk/arm64/sweet_early.c osfmk/arm64/sweet_early.c
+index dcdbcf6..d4f3ca3 100644
+--- a/osfmk/arm64/sweet_early.c
++++ b/osfmk/arm64/sweet_early.c
+@@ -12,12 +12,12 @@
+ #include <kern/misc_protos.h>
+ 
+ /* The bootstrap TTBR0 maps DECON scanout VA=PA until arm_vm_init. */
+-#define A5_FB ((volatile uint32_t *)(uintptr_t)0x67000000)
+-#define A5_STRIDE 1080u
++#define A5_FB ((volatile uint32_t *)(uintptr_t)A5_FB_PHYS)
++#define A5_STRIDE (A5_FB_STRIDE / 4u)
+ #define A5_SCALE 2u
+ #define A5_ROW_HEIGHT (16u * A5_SCALE)
+ #define A5_COL_WIDTH (8u * A5_SCALE)
+-#define A5_COLS (1080u / A5_COL_WIDTH)
++#define A5_COLS (A5_FB_WIDTH / A5_COL_WIDTH)
+ extern unsigned char iso_font[256 * 16];
+ static unsigned int a5_row = 4, a5_col, a5_active = 1, a5_panicking;
+ 
+@@ -26,7 +26,7 @@ a5_clear_row(void)
+ {
+ 	for (unsigned int y = 0; y < A5_ROW_HEIGHT; y++) {
+ 		volatile uint32_t *line = A5_FB + (a5_row * A5_ROW_HEIGHT + y) * A5_STRIDE;
+-		for (unsigned int x = 0; x < A5_STRIDE; x++) {
++		for (unsigned int x = 0; x < A5_FB_WIDTH; x++) {
+ 			line[x] = 0xff000000u;
+ 		}
+ 	}
+@@ -44,7 +44,7 @@ sweet_early_putc(char c)
+ 	}
+ 	if (c == '\n' || a5_col >= A5_COLS) {
+ 		a5_col = 0;
+-		a5_row = (a5_row + 1) % (1920u / A5_ROW_HEIGHT);
++		a5_row = (a5_row + 1) % (A5_FB_HEIGHT / A5_ROW_HEIGHT);
+ 		a5_clear_row();
+ 		if (c == '\n') {
+ 			return;
+diff --git osfmk/console/serial_console.c osfmk/console/serial_console.c
+index 2ab4334..f2489bd 100644
+--- a/osfmk/console/serial_console.c
++++ b/osfmk/console/serial_console.c
+@@ -266,7 +266,7 @@ _cnputc(char c, bool poll)
+  *             waiting for an interrupt when the hardware device isn't ready
+  * @param size The number of characters to print to the console.
+  */
+-#if defined(ARM64_BOARD_CONFIG_SWEET)
++#if defined(ARM64_BOARD_CONFIG_SWEET) || defined(ARM64_BOARD_CONFIG_A5XELTE)
+ extern void sweet_log_append(const char *c, int size);  /* bsd/dev/sweet_ufs.c */
+ #endif
+ #if defined(ARM64_BOARD_CONFIG_A5XELTE)
+@@ -286,7 +286,7 @@ _cnputs(char *c, int size, bool poll)
+ {
+ 	extern int disableConsoleOutput;
+ 
+-#if defined(ARM64_BOARD_CONFIG_SWEET)
++#if defined(ARM64_BOARD_CONFIG_SWEET) || defined(ARM64_BOARD_CONFIG_A5XELTE)
+ 	sweet_log_append(c, size);
+ #endif
+ #if defined(ARM64_BOARD_CONFIG_A5XELTE)
+diff --git osfmk/vm/vm_resident.c osfmk/vm/vm_resident.c
+index 6394730..de4a6a7 100644
+--- a/osfmk/vm/vm_resident.c
++++ b/osfmk/vm/vm_resident.c
+@@ -1190,6 +1190,9 @@ vm_page_bootstrap(
+ 	 */
+ 
+ 	kernel_debug_string_early("pmap_startup");
++#if defined(ARM64_BOARD_CONFIG_A5XELTE)
++	kprintf("A5 vm: vm_page_bootstrap -> pmap_startup\n");
++#endif
+ 	pmap_startup(&virtual_space_start, &virtual_space_end);
+ 	virtual_space_start = round_page(virtual_space_start);
+ 	virtual_space_end = trunc_page(virtual_space_end);
+@@ -1439,6 +1442,9 @@ pmap_startup(
+ 
+ 
+ 	vm_pages = (vm_page_t) pmap_steal_freeable_memory(npages * sizeof *vm_pages);
++#if defined(ARM64_BOARD_CONFIG_A5XELTE)
++	kprintf("A5 vm: npages=%u vm_pages=%p mem_sz=%#llx\n", npages, vm_pages, (unsigned long long)mem_sz);
++#endif
+ 
+ 	/*
+ 	 * Check if we want to initialize pages to a known value
+@@ -1540,6 +1546,11 @@ pmap_startup(
+ 		if (!pmap_next_page(&phys_page)) {
+ 			break;
+ 		}
++#if defined(ARM64_BOARD_CONFIG_A5XELTE)
++		if ((i & 0x7fff) == 0) {
++			kprintf("A5 vm: page %u ppn %#x\n", i, phys_page);
++		}
++#endif
+ 
+ 		if (phys_page < max_valid_low_ppnum) {
+ 			++low_page_count;
+@@ -1575,6 +1586,9 @@ pmap_startup(
+ 		}
+ 	}
+ 	vm_page_pages = vm_pages_count; /* used to report to user space */
++#if defined(ARM64_BOARD_CONFIG_A5XELTE)
++	kprintf("A5 vm: %u pages initialized, releasing\n", vm_pages_count);
++#endif
+ 
+ 	if (!vm_himemory_mode) {
+ 		do {
+diff --git pexpert/arm/pe_fiq.c pexpert/arm/pe_fiq.c
+index d3f8767..0207f32 100644
+--- a/pexpert/arm/pe_fiq.c
++++ b/pexpert/arm/pe_fiq.c
+@@ -315,11 +315,11 @@ pe_init_fiq(void)
+ 	a5_gic_cpu_masks[logical] = mask;
+ 	/* INTID 27 is the virtual timer PPI; SGI 1 carries CPU signals. */
+ 	a5_gic_write32(a5_gicd_base, 0x080,
+-	    a5_gic_read32(a5_gicd_base, 0x080) | (1U << 27) | (1U << 1));
++	    a5_gic_read32(a5_gicd_base, 0x080) | (1U << A5XELTE_VTIMER_INTID) | (1U << 1));
+ 	for (unsigned int i = 0; i < 32; i += 4) {
+ 		a5_gic_write32(a5_gicd_base, 0x400 + i, 0xa0a0a0a0U);
+ 	}
+-	a5_gic_write32(a5_gicd_base, 0x100, (1U << 27) | (1U << 1));
++	a5_gic_write32(a5_gicd_base, 0x100, (1U << A5XELTE_VTIMER_INTID) | (1U << 1));
+ 	a5_gic_write32(a5_gicc_base, 0x004, 0xff); /* GICC_PMR */
+ 	a5_gic_write32(a5_gicc_base, 0x008, 0);    /* GICC_BPR */
+ 	a5_gic_write32(a5_gicc_base, 0x000,
+diff --git pexpert/arm/pe_serial.c pexpert/arm/pe_serial.c
+index ed7dccd..588f525 100644
+--- a/pexpert/arm/pe_serial.c
++++ b/pexpert/arm/pe_serial.c
+@@ -721,6 +721,57 @@ static volatile uint32_t *fbcon_base;
+ static uint32_t fbcon_width, fbcon_height, fbcon_stride;
+ static uint32_t fbcon_cols, fbcon_rows, fbcon_col, fbcon_row;
+ 
++#if defined(GTA4XL)
++/*
++ * Copy of the console in our ramoops pmsg zone (top DRAM bank), in
++ * persistent_ram format (sig "DBGC", start, size, ring data),
++ * appended to the loader's text there. Read back with dd from
++ * Lineage recovery after a forced reboot.
++ */
++#define KLOG_CAP        (A5_KLOG_SIZE - 12)
++static volatile uint32_t *klog_hdr;
++static volatile uint8_t *klog_data;
++static uint32_t klog_start, klog_size;
++static void klog_putc(uint8_t c);
++
++static void
++klog_init(void)
++{
++	klog_hdr = (volatile uint32_t *)ml_io_map(A5_KLOG_PHYS, A5_KLOG_SIZE);
++	if (klog_hdr == NULL) {
++		return;
++	}
++	klog_data = (volatile uint8_t *)(klog_hdr + 3);
++	/* Continue after the loader's text if its header is sane. */
++	if (klog_hdr[0] == 0x43474244u && klog_hdr[1] == klog_hdr[2] &&
++	    klog_hdr[2] < KLOG_CAP - 0x10000) {
++		klog_start = klog_size = klog_hdr[2];
++	} else {
++		klog_hdr[0] = 0x43474244u;
++		klog_start = klog_size = 0;
++	}
++	const char *banner = "\n--- XNU console ---\n";
++	for (; *banner; banner++) {
++		klog_putc((uint8_t)*banner);
++	}
++}
++
++static void
++klog_putc(uint8_t c)
++{
++	if (klog_data == NULL) {
++		return;
++	}
++	klog_data[klog_start] = c;
++	klog_start = (klog_start + 1) % KLOG_CAP;
++	if (klog_size < KLOG_CAP) {
++		klog_size++;
++	}
++	klog_hdr[1] = klog_start;
++	klog_hdr[2] = klog_size;
++}
++#endif
++
+ static void
+ fbcon_clear_row(uint32_t row)
+ {
+@@ -761,6 +812,9 @@ fbcon_transmit_ready(void)
+ static void
+ fbcon_transmit_data(uint8_t c)
+ {
++#if defined(GTA4XL)
++	klog_putc(c);
++#endif
+ 	if (c == '\r') {
+ 		fbcon_col = 0;
+ 		return;
+@@ -840,6 +894,9 @@ fbcon_probe(void)
+ 	}
+ 	sweet_early_mark(17, "fbcon config read; mapping");
+ 	fbcon_base = (volatile uint32_t *)ml_io_map_wcomb(reg[0], reg[1]);
++#if defined(GTA4XL)
++	klog_init();
++#endif
+ 	sweet_early_mark(18, "fbcon mapping returned");
+ 	if (fbcon_base != NULL) {
+ 		register_serial_functions(&sweet_fbcon_serial_functions);
+diff --git pexpert/pexpert/arm64/A5XELTE.h pexpert/pexpert/arm64/A5XELTE.h
+index e6718d4..45dc259 100644
+--- a/pexpert/pexpert/arm64/A5XELTE.h
++++ b/pexpert/pexpert/arm64/A5XELTE.h
+@@ -24,6 +24,41 @@
+ #define HAS_GIC_V3                    0
+ #define A5XELTE_VTIMER_INTID         27
+ 
++/*
++ * Samsung Galaxy Tab S6 Lite (SM-P610, gta4xlwifi, Exynos 9611) build
++ * of this port. Same Samsung S-Boot handoff, GIC-400 and 26 MHz timer
++ * as the A5/S8; the board facts that differ are below.
++ */
++#define GTA4XL                        1
++#if defined(GTA4XL)
++#define A5_FB_PHYS                    0xCA000000  /* exynos,fb_rmem */
++#define A5_FB_WIDTH                   1200
++#define A5_FB_HEIGHT                  2000
++#define A5_FB_STRIDE                  4800        /* bytes per row */
++#define A5_FB_2M_BLOCKS               5           /* 1200*2000*4 bytes */
++#define A5_ENTRY_MARKER_PHYS          0x8F007F000 /* slot in the loader's pstore text */
++#define A5_BOOT_MPIDR                 0x0         /* Cortex-A73 core 0 (probe-verified) */
++#define A5_KEYS_DEFAULT               0           /* ALIVE banks unverified */
++#define A5_TOUCH_DEFAULT              0           /* SPI Himax path absent */
++#define A5_KLOG_PHYS                  0x8F0100000 /* our ramoops pmsg zone */
++#define A5_KLOG_SIZE                  0x80000
++/* Samsung's 9611 kernel DT: arch timer "use-physical-timer". Use the
++ * non-secure physical timer, PPI 14 = INTID 30 (same as the S8). */
++#define A5_USE_PHYS_TIMER             1
++#undef A5XELTE_VTIMER_INTID
++#define A5XELTE_VTIMER_INTID         30
++#else
++#define A5_FB_PHYS                    0x67000000
++#define A5_FB_WIDTH                   1080
++#define A5_FB_HEIGHT                  1920
++#define A5_FB_STRIDE                  4320
++#define A5_FB_2M_BLOCKS               5
++#define A5_ENTRY_MARKER_PHYS          0x469ff100
++#define A5_BOOT_MPIDR                 0
++#define A5_KEYS_DEFAULT               1
++#define A5_TOUCH_DEFAULT              1
++#endif
++
+ #ifndef ASSEMBLER
+ #define PLATFORM_PANIC_LOG_DISABLED
+ #endif
