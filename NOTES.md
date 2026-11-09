@@ -178,6 +178,7 @@ of each day's section. Log excerpts belong here, not in issues.
   parses cleanly with upstream adt.py; root compatible
   D22AP/iPhone10,3). Unwrapper: tools/im4p.py (the dtre
   payload is LZFSE-compressed too — decode after unwrap).
+- mkadt_gta4xl.py built + verified (2026-11-09): ADT 12,256 B, parses back clean; dram 0x880000000/512 MiB, 8 CPUs (A73 0x0 running + 0x1-0x3, A53 0x100-0x103), GIC offsets 0x2301000/0x2302000, vtimer INTID 30, fbcon 0xCA000000 stride 4800, UFS node; stale-value audit clean. adt.py/mkadt.py vendored from the S8 fork (tools/UPSTREAM.md).
 - Loader gap analysis saved as research/GATE2-LOADER-PORT.md
   (pushed); dreamlte loader vendored into shim/v1/ with
   provenance (GPL-2.0 files keep their SPDX headers).

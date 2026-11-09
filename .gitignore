@@ -15,3 +15,7 @@ shim/out/
 out/
 logs/
 .DS_Store
+research/ipsw-x/
+firmware-ios/
+shim/*/out/
+shim/*/*.img
