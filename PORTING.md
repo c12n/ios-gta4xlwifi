@@ -73,12 +73,18 @@ Samsung Galaxy Tab S6 Lite Wi-Fi 2020 (SM-P610, `gta4xlwifi`).
   (exact build fingerprint recorded in NOTES.md).
 - Deliverable: `research/HARDWARE-MAP.md` completed from real data.
 
-### Gate 1 — Our code runs
+### Gate 1 — Our code runs ✅ PASSED 2026-11-09
 - Minimal shim (from the S8 loader) that draws a test pattern /
   prints to the framebuffer and writes a marker to ramoops, packed
   into the BOOT partition format and flashed via Odin/Heimdall.
 - Success: test pattern on screen + marker readable in recovery,
   and stock boot image restores Android cleanly.
+- As built: `shim/v0` — a from-scratch 1.1 KB AArch64 payload
+  (not the S8 loader) packed into the stock boot image layout,
+  written from Lineage recovery. Owner photo confirms color bands
+  + running pass counter. Framebuffer verdicts: 32bpp XRGB,
+  stride 1200, S-Boot display handover persists. (ramoops marker
+  not implemented in v0 — superseded by the on-screen counter.)
 
 ### Gate 2 — XNU early boot
 - ios-sweet patch series rebased; new machine config for

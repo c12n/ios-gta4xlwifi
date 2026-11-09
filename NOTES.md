@@ -130,6 +130,34 @@ of each day's section. Log excerpts belong here, not in issues.
   recovery (Power + Vol Up) before Android can restore the stock
   recovery → partition backups → shim v0.
 
+### GATE 1 PASSED — 2026-11-09 ~13:39 MST
+
+- **Correction to the Nov 5 record:** the samloader flash DID
+  write Lineage recovery + vbmeta — its non-verbose output simply
+  showed no progress and the session speed misled us. Proof on
+  resume (2026-11-09): the tablet sat in Lineage recovery
+  (adb product `lineage_gta4xlwifi`), and the on-device recovery
+  partition hashes to Lineage's published sha256 exactly.
+- From recovery (root adb): backed up boot/dtbo/vbmeta/
+  vbmeta_samsung/recovery to the MSI (`gate1-backup\`). On-device
+  boot and dtbo hashes are **identical to the stock firmware
+  images** — the safety net is proven byte-for-byte.
+- **Shim v0** (`shim/v0/`): 1,112-byte AArch64 payload (gcc 13
+  cross build) linked at 0x80080000, packed by replacing the
+  kernel payload inside the stock boot.img in place (header,
+  ramdisk, DTB byte-identical). Written to BOOT from recovery;
+  read-back sha256 matched the built image.
+- **Result (owner photo):** the tablet boots our code — 8 color
+  bands + two-digit pass counter on screen. Bands appear vertical
+  because the panel scans portrait-native while the tablet lies
+  landscape. Verdicts from the photo: pixel format 32bpp XRGB
+  correct, stride 1200 px correct (clean straight edges, no
+  shear), band rotation = multiple passes executed, display
+  pipeline stays up after S-Boot handoff with no kernel driver.
+- Gate 1 definition met: shim boots from the BOOT partition and
+  takes over from S-Boot. Next: Gate 2 — XNU early boot
+  (kernelcache + ADT construction).
+
 ## Template for boot entries
 
 ### Boot NNN — YYYY-MM-DD HH:MM
