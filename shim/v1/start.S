@@ -1,10 +1,13 @@
 /* SPDX-License-Identifier: GPL-2.0-only
- * Galaxy S8 (SM-G950F, Exynos 8895) XNU loader entry.
+ * Galaxy Tab S6 Lite (Exynos 9611) XNU loader entry, ported from
+ * the Galaxy S8 (SM-G950F, Exynos 8895) loader in ios-galaxy-s8.
  *
  * arm64 Linux Image header so Samsung S-Boot treats us like a kernel. S-Boot
- * enters at EL1 with the MMU off, CNTFRQ_EL0 = 0 and x0 = DTB (s8-probe
- * v2-v7). Position independent: the header asks for text_offset 0x80000 like
- * the stock kernel, but S-Boot has been seen loading us at 0x800b4000.
+ * enters at EL1 with the MMU off and x0 = DTB; CNTFRQ_EL0 reads 26000000
+ * on this device (v0.1 probe, 2026-11-09 - the S8's was 0). Position
+ * independent: the header asks for text_offset 0x80000 like the stock
+ * kernel; the S8's S-Boot has been seen loading elsewhere, ours has so
+ * far honored the v2 header's kernel_addr exactly.
  */
 	.section .text.head, "ax"
 	.globl _head

@@ -181,6 +181,15 @@ of each day's section. Log excerpts belong here, not in issues.
 - Loader gap analysis saved as research/GATE2-LOADER-PORT.md
   (pushed); dreamlte loader vendored into shim/v1/ with
   provenance (GPL-2.0 files keep their SPDX headers).
+- **Shim v1 loader adapted + builds clean (2026-11-09):**
+  out/Image 46,192 B, ABS64 PIC gate passed, -Werror clean.
+  Ours: FB 0xCA000000, ramoops console 0x8F0000000 / pmsg
+  0x8F0100000 / marker 0x8F007F000, low-RAM end 0xBAB00000,
+  /chosen fallback initrd 0x81000000, MPIDR+CNTFRQ logged,
+  all S8 probes dropped. One portability fix vs upstream:
+  build.sh used gawk's strtonum (mawk here) — replaced with
+  bash arithmetic. Next: pack.py v1 (true-size v2 repack) +
+  hand-rolled dummy SWEETXNU payload for the smoke test.
 
 ## Template for boot entries
 

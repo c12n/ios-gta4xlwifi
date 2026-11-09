@@ -1,57 +1,65 @@
 /* SPDX-License-Identifier: GPL-2.0-only
- * Galaxy S8 (SM-G950F, Exynos 8895) XNU loader.
+ * Galaxy Tab S6 Lite (SM-P610, Exynos 9611) XNU loader.
  *
- * S-Boot hands us the BOOT ramdisk as /chosen/linux,initrd-{start,end}; it
- * holds a tools/mkpayload.py "SWEETXNU" v1 container (Mach-O segments, ADT,
- * boot-args). We copy it into the kernel-managed RAM window the ADT names
- * (the 2 GiB bank at 0x880000000, free of firmware carve-outs), build
- * boot_args and jump to XNU's physical entry with the MMU off, as
- * shim/a5xelte/xnu_boot.c does on the Galaxy A5.
+ * Ported from the Galaxy S8 (dreamlte) loader in ios-galaxy-s8
+ * (see UPSTREAM.md). Board deltas are listed in
+ * research/GATE2-LOADER-PORT.md; in short: framebuffer at
+ * 0xCA000000 (1200x2000, DECON video mode - no trigger unmask),
+ * ramoops zones relocated into the top DRAM bank above the XNU
+ * window, low-RAM bound from the live device tree, all S8
+ * hardware probes (PMIC/UFS/touch/battery/display/SMP) dropped
+ * for Gate 2, and a hardcoded initrd fallback because whether
+ * S-Boot's v2-header flow populates /chosen is unverified.
  *
- * Every step is drawn on the S-Boot framebuffer and appended to TWRP's
- * ramoops console zone, so after a forced reboot into TWRP the log is in
- * /sys/fs/pstore/console-ramoops-0 (tools/dreamlte-log-pull.ps1).
+ * S-Boot hands us the BOOT ramdisk as /chosen/linux,initrd-{start,end};
+ * it holds a tools/mkpayload.py "SWEETXNU" v1 container (Mach-O
+ * segments, ADT, boot-args). We copy it into the kernel-managed RAM
+ * window the ADT names (the 2 GiB bank at 0x880000000, free of
+ * firmware carve-outs), build boot_args and jump to XNU's physical
+ * entry with the MMU off.
+ *
+ * Every step is drawn on the S-Boot framebuffer and appended to
+ * both ramoops zones, so after a forced reboot into Lineage
+ * recovery the log can be read back with dd from the zone
+ * addresses below.
  */
 #include <stdint.h>
 #include "fdt.h"
 #include "font.h"
-#include "ufs_probe.h"
-#include "smp_probe.h"
-#include "touch_probe.h"
-#include "pmic.h"
-#include "display_probe.h"
 
-#define UFS_PROBE_DMA		0x8f0000000UL	/* high bank, outside XNU's window */
-
-/* ---- board facts (s8-probe v2-v7, live DT, /proc/iomem) ---- */
-#define FB_BASE			0xcc000000UL	/* s3cfb.bootloaderfb */
-#define FB_W			1440
-#define FB_H			2960
+/* ---- board facts (Gate 0 hardware map + v0.1 probe, live DT) ---- */
+#define FB_BASE			0xCA000000UL	/* exynos,fb_rmem reservation */
+#define FB_W			1200
+#define FB_H			2000
 #define FB_STRIDE		(FB_W * 4)
-#define DECON_TRIG		0x12860070UL	/* DECON_F HW_SW_TRIG_CONTROL */
-#define DECON_TRIG_UNMASK	0x1281U		/* uniLoader dreamlte */
-#define RAMOOPS_CONSOLE		0x92080000UL	/* TWRP ramoops console zone */
+#define RAMOOPS_CONSOLE		0x8F0000000UL	/* top bank, above XNU window */
 #define RAMOOPS_CONSOLE_SIZE	0x80000UL
 #define PRZ_SIG			0x43474244U	/* "DBGC" */
-#define XNU_MARKER_PHYS		0x920ff000UL	/* A5_ENTRY_MARKER_PHYS in 0124 */
+#define XNU_MARKER_PHYS		0x8F007F000UL	/* console + size - 0x1000; must match A5_ENTRY_MARKER_PHYS in patch 0125 */
 #define LOW_RAM_BASE		0x80000000UL	/* initrd must be in the low bank */
-#define LOW_RAM_END		0xbc800000UL
+#define LOW_RAM_END		0xBAB00000UL	/* live-DT bank 0 end */
 #define XNU_RAM_BASE		0x880000000UL	/* 2 GiB high bank */
 #define XNU_RAM_END		0x900000000UL
 #define PAGE_SIZE		4096UL
 #define BOOT_LINE_LENGTH	608
+/* Fallback if /chosen lacks the initrd properties: the stock v2
+ * header's ramdisk_addr (0x11000000) + Samsung's 0x70000000 base.
+ * The payload self-describes its segments, so the synthetic end
+ * only bounds the header checks. */
+#define INITRD_FALLBACK		0x81000000UL
+#define INITRD_FALLBACK_LEN	0x4000000UL	/* 64 MiB synthetic bound */
 
 /* ---- persistent log ----
  * The same text goes to two ramoops zones with separate headers: the
- * console zone (/sys/fs/pstore/console-ramoops-0) and the pmsg zone
- * (pmsg-ramoops-0). A forced reboot flips a few RAM bits; when one flips a
- * zone header, TWRP drops that zone ("found existing invalid buffer", seen on
- * the first XNU boot), the other copy usually survives. */
+ * console zone and the pmsg zone. A forced reboot flips a few RAM
+ * bits; when one flips a zone header, a pstore reader drops that
+ * zone, the other copy usually survives. Our read-back is a raw dd
+ * from Lineage recovery, so the zones only need to persist. */
 struct prz {
 	uint32_t sig, start, size;
 	uint8_t data[];
 };
-#define RAMOOPS_PMSG		0x92180000UL	/* after dump, console, ftrace */
+#define RAMOOPS_PMSG		0x8F0100000UL	/* after console zone + gap */
 static volatile struct prz *const prz = (volatile struct prz *)RAMOOPS_CONSOLE;
 static volatile struct prz *const prz2 = (volatile struct prz *)RAMOOPS_PMSG;
 #define PRZ_DATA_MAX	(RAMOOPS_CONSOLE_SIZE - 12)
@@ -223,12 +231,12 @@ static uint64_t fail(const char *why)
 	fg = 0xffff4040U;
 	out("FAIL: ");
 	out(why);
-	out("\nHold POWER+VOL DOWN, then POWER+BIXBY+VOL UP -> TWRP\n");
+	out("\nHold POWER+VOL DOWN, then POWER+VOL UP -> Lineage recovery\n");
 	return 0;
 }
 
 /* Leave an 8-byte hole at XNU_MARKER_PHYS inside the pstore text. XNU's
- * start_first_cpu stores "XNUELTE1" there (0124 A5_ENTRY_MARKER_PHYS). */
+ * start_first_cpu stores "XNUELTE1" there (0125 A5_ENTRY_MARKER_PHYS). */
 static void reserve_marker(void)
 {
 	uint32_t at = (uint32_t)(XNU_MARKER_PHYS - (RAMOOPS_CONSOLE + 12));
@@ -246,75 +254,36 @@ static void reserve_marker(void)
 	log_ch1('\n');
 }
 
-/* Days since 1970-01-01 of a proleptic Gregorian date (Howard Hinnant). */
-static int64_t days_from_civil(int64_t y, unsigned m, unsigned d)
-{
-	y -= m <= 2;
-	int64_t era = (y >= 0 ? y : y - 399) / 400;
-	unsigned yoe = (unsigned)(y - era * 400);
-	unsigned doy = (153 * (m + (m > 2 ? -3 : 9)) + 2) / 5 + d - 1;
-	unsigned doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
-	return era * 146097 + (int64_t)doe - 719468;
-}
-
-/* XNU's platform expert has no clock on the S8 (iOS showed 1969). Pass the
- * PMIC RTC as "s8rtc=" = UTC seconds at system-counter zero; the kernel
- * adds the counter (patch 0124, PEGetUTCTimeOfDay). RTC bytes from 0x04:
- * msec, sec, min, hour, weekday mask, day, month, year-2000 (boot 26). */
-static void rtc_bootarg(volatile struct boot_args *ba, uint64_t raw)
-{
-	unsigned sec = (raw >> 8) & 0x7f, min = (raw >> 16) & 0x7f;
-	unsigned hour = (raw >> 24) & 0x1f, day = (raw >> 40) & 0x1f;
-	unsigned mon = (raw >> 48) & 0x0f, year = 2000 + ((raw >> 56) & 0x7f);
-	if (sec > 59 || min > 59 || hour > 23 || !day || !mon || mon > 12 || year < 2024)
-		return;
-	int64_t t = days_from_civil(year, mon, day) * 86400 + hour * 3600 + min * 60 + sec;
-	uint64_t cnt;
-	__asm__ volatile("isb; mrs %0, cntpct_el0" : "=r"(cnt));
-	t -= (int64_t)(cnt / 26000000);
-	kv("rtc unix", (uint64_t)t);
-	out("\n");
-	char num[24];
-	int n = 0;
-	do {
-		num[n++] = (char)('0' + t % 10);
-		t /= 10;
-	} while (t && n < 20);
-	int at = 0;
-	while (at < BOOT_LINE_LENGTH && ba->CommandLine[at])
-		at++;
-	const char *key = " s8rtc=";
-	if (at + 7 + n >= BOOT_LINE_LENGTH)
-		return;
-	for (int i = 0; key[i]; i++)
-		ba->CommandLine[at++] = key[i];
-	while (n)
-		ba->CommandLine[at++] = num[--n];
-	ba->CommandLine[at] = 0;
-}
-
 uint64_t dl_main(uintptr_t dtb, uint64_t el, uint64_t sctlr)
 {
-	*(volatile uint32_t *)DECON_TRIG = DECON_TRIG_UNMASK;
 	prz->sig = PRZ_SIG;
 	prz->start = prz->size = 0;
 	prz2->sig = PRZ_SIG;
 	prz2->start = prz2->size = 0;
 	fill(0, 0, FB_W, FB_H, 0xff000000U);
 	fg = 0xffffff00U;
-	out("S8LOADER BEGIN  (ios-s8 dreamlte XNU loader)\n");
+	out("GTA4XL LOADER BEGIN  (ios-gta4xlwifi XNU loader)\n");
 	fg = 0xffffffffU;
+	uint64_t mpidr, cntfrq;
+	__asm__ volatile("mrs %0, mpidr_el1" : "=r"(mpidr));
+	__asm__ volatile("mrs %0, cntfrq_el0" : "=r"(cntfrq));
 	kv("EL", el);
 	kv("SCTLR", sctlr);
 	kv("DTB", dtb);
+	out("\n");
+	kv("MPIDR", mpidr);
+	kv("CNTFRQ", cntfrq);
 	out("\n");
 	if (el != 1)
 		return fail("not entered at EL1");
 
 	uint64_t rd_start, rd_end;
 	if (!fdt_chosen_u64(dtb, "linux,initrd-start", &rd_start) ||
-	    !fdt_chosen_u64(dtb, "linux,initrd-end", &rd_end))
-		return fail("no initrd in /chosen");
+	    !fdt_chosen_u64(dtb, "linux,initrd-end", &rd_end)) {
+		rd_start = INITRD_FALLBACK;
+		rd_end = INITRD_FALLBACK + INITRD_FALLBACK_LEN;
+		out("no initrd in /chosen - header fallback\n");
+	}
 	kv("initrd", rd_start);
 	kv("end", rd_end);
 	out("\n");
@@ -347,9 +316,8 @@ uint64_t dl_main(uintptr_t dtb, uint64_t el, uint64_t sctlr)
 	if (kernel_end >= mem_end)
 		return fail("kernel larger than RAM window");
 
-	/* iBoot hands XNU zeroed RAM; S-Boot leaves the previous OS's data
-	 * (TWRP's Linux after `adb reboot`, partly decayed after a forced
-	 * reboot). XNU 6 hung right after its version line, in
+	/* iBoot hands XNU zeroed RAM; S-Boot leaves the previous OS's data.
+	 * On the S8, XNU hung right after its version line, in
 	 * vm_mem_bootstrap, depending on how the phone was rebooted. */
 	out("zeroing XNU RAM...\n");
 	zero(p->phys_base, p->mem_size);
@@ -408,16 +376,6 @@ uint64_t dl_main(uintptr_t dtb, uint64_t el, uint64_t sctlr)
 		out(c);
 	}
 	out("\n");
-	ufs_probe(kv, out, UFS_PROBE_DMA);
-	rtc_bootarg(ba, pmic_init(kv, out));
-	clean(ba_pa, ba_pa + PAGE_SIZE);
-	touch_probe(kv, out);
-	battery_probe(kv, out);
-	display_probe(kv, out);
-	mngs_probe(kv, out);
-	/* smp_probe(kv, out) proved the PMU power-up (boot 19); it leaves the
-	 * probed cores' PMU power on, which hid the 0 -> 0xF edge XNU needs. */
-	(void)smp_probe;
 	fg = 0xff40ff40U;
 	out("\nJUMP TO XNU\n");
 	reserve_marker();
