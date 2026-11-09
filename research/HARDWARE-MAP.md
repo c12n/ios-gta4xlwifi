@@ -41,7 +41,7 @@ marked ✅(blob). Decompiled trees are kept locally under
 | --- | --- | --- |
 | CPUs | cpu@0–3 + cpu@100–103 (clusters 0/1, MPIDR 0x0–0x3 / 0x100–0x103) | ✅ |
 | GIC | **GIC-400** (GICv2), compatible `arm,cortex-a15-gic`/`arm,cortex-a9-gic`; reg: **GICD 0x12301000/0x1000, GICC 0x12302000/0x1000, GICH 0x12304000/0x2000, GICV 0x12306000/0x2000** (note: real GICC is 8 KiB, GICC_DIR at 0x12303000 — DTS lists 4 KiB) | ✅(blob) |
-| Arch timer | `arm,armv8-timer`, **clock-frequency 26000000 (26 MHz)**, PPIs 13/14/11/10 level-low; **CNTFRQ_EL0 is NOT programmed by S-Boot** — the shim/ADT must hardcode 26 MHz (XNU defaults 24 MHz) | ✅(blob) |
+| Arch timer | `arm,armv8-timer`, **clock-frequency 26000000 (26 MHz)**, PPIs 13/14/11/10 level-low; ~~CNTFRQ_EL0 is NOT programmed by S-Boot~~ — **CORRECTED 2026-11-09 by the shim v0.1 on-device probe: CNTFRQ_EL0 reads 0x018CBA80 = 26,000,000** (an early boot stage does program it; the ADT still carries timebase-frequency 26000000) | ✅(blob) + probe |
 | MCT | `mct@10040000`, compatible `samsung,exynos4210-mct`, reg size 0x800, 12 IRQs | ✅(blob) |
 | PSCI | `arm,psci`, **method `smc`**; CPU_SUSPEND 0xC4000001, CPU_OFF 0x84000002, CPU_ON 0xC4000003. **SYSTEM_RESET/OFF/VERSION unsupported until proven otherwise** — reset fallback: write 1 to PMU SWRESET @0x11860400 | ✅(blob) |
 | PMU | `arm-pmu`, `exynos-pmu`, syscon @11860000 (SWRESET at 0x11860400) | ✅ |

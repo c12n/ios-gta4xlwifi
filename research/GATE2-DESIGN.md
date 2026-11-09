@@ -100,10 +100,12 @@ poke is needed) - keep the S8 unmask only as a fallback.
 
 ## Open questions / risks, in solve order
 
-1. **Boot-CPU MPIDR unknown** (A73 0x0 vs A53 0x100 - the S8
-   boots on 0x100). Shim v1 probe: read MPIDR_EL1, paint it on
-   screen over the bands. Everything (ADT cpu0, board patch)
-   keys off this.
+1. ~~**Boot-CPU MPIDR unknown**~~ **SOLVED 2026-11-09** by the
+   shim v0.1 probe (owner photo): **MPIDR = 0x0000 — S-Boot
+   boots on A73 core 0 (unlike the S8's A53 0x100), at EL1**,
+   and CNTFRQ_EL0 = 0x018CBA80 (26 MHz, programmed). ADT cpu0
+   `reg` = 0x0 with `state` = running; the 0125 board patch's
+   boot-MPIDR macro = 0x0.
 2. **Ramoops zone**: Lineage recovery's reservation is unknown
    (the stock DT uses Samsung debug-snapshot instead, e.g.
    log_pstore at 0xF9D10000). Fallback plan: FB console only -

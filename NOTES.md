@@ -158,6 +158,21 @@ of each day's section. Log excerpts belong here, not in issues.
   takes over from S-Boot. Next: Gate 2 — XNU early boot
   (kernelcache + ADT construction).
 
+### Gate 2 prep — 2026-11-09 afternoon
+
+- Loader study done (ios-sweet + ios-galaxy-s8 local clones);
+  design brief at research/GATE2-DESIGN.md. Lineage: A5XELTE
+  config + dreamlte loader, not the SWEET (16K/GICv3) config.
+- Real RAM map read from the live tree in recovery: banks
+  0x80000000+0x3AB00000, 0xC0000000+0x20000000,
+  0xE1900000+0x1E700000, 0x880000000+0x80000000 (~3.9 GB
+  usable). XNU window: 512 MB inside the top bank.
+- **Shim v0.1 probe** (bands + MPIDR/EL/CNTFRQ readout) flashed
+  and photographed: **boot CPU is A73 core 0 (MPIDR 0x0) at
+  EL1; CNTFRQ_EL0 = 26,000,000** (programmed — corrects the
+  Gate 0 DT-based assumption).
+- iOS 16.7.16 IPSW downloading from Apple (extraction next).
+
 ## Template for boot entries
 
 ### Boot NNN — YYYY-MM-DD HH:MM
