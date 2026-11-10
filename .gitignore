@@ -19,3 +19,4 @@ research/ipsw-x/
 firmware-ios/
 shim/*/out/
 shim/*/*.img
+kernel/
