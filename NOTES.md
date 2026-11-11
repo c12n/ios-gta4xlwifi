@@ -238,6 +238,44 @@ of each day's section. Log excerpts belong here, not in issues.
   (Boot 002); success = XNUELTE1 marker / Darwin banner
   reaching platform-expert init.
 
+### Boot 002 — 2026-11-11 ~11:28 MST — GATE 2 PASSED
+- Build: shim v1 loader + XNU 8796 payload (A5XELTE config,
+  patches 0001-0123 + 0125-gta4xlwifi); boot-loader-xnu.img
+  sha256 9003b752...; boot-args `debug=0xc serial=3 cpus=1
+  keepsyms=1 -enable_kprintf_spam -noprogress wdt=-1
+  wdt_test=no_user_checkin a5touchprobe=0`.
+- Change vs last boot: dummy stub replaced by the real
+  kernel payload. Nothing else changed.
+- Procedure: runbook gates again — battery Full 4.353 V,
+  by-name/boot = sda12, /tmp hash verified, dd 4064+0
+  records (16,646,144 B), read-back prefix hash matched,
+  reboot.
+- Result: **XNU EARLY BOOT PASSED, first try.** Owner photo
+  (~1 min after reboot) shows the framebuffer console deep
+  into kernel init, no panic in frame. Verbatim lines that
+  matter: `iBoot version: gta4xlwifi-entry`;
+  `A5XELTE: starting device-tree platform expert`;
+  `SWEET FB: AppleCLCD 1200x2000 stride 4800 at 0xca000000,
+  default surface 1, presented as 1125x2436`;
+  `A5XELTE: platform expert registered`;
+  `VM bootstrap done: 61 maps, 112 entries and 116 holes
+  left`; last visible line `IOKit IOMD setownership
+  ENABLED`. Also clean: scheduler/clutch, IPC, BANK, KDP
+  over serial, vnguard policy, SWEET PRNG/AKS/WDT/SURF/HID
+  registrations. Known-benign noise: `debug_log_init:
+  Error!! gPanicBase is still not initialized` x2 (pre-panic-
+  buffer debug log, expected this early).
+- Claims kept separate: build verified (CI + LSE scan);
+  flash verified (hashes); screen proves XNU executed to
+  IOKit init on the real panel. NOT yet known: where boot
+  stops after this frame (root device does not exist yet —
+  that is Gate 3), and the XNUELTE1 marker has not been
+  read back.
+- Next: recovery -> read back marker 0x8F007F000 (expect
+  XNUELTE1) + pmsg klog 0x8F0100000 via /dev/mem (route
+  unverified; try it). Then Gate 3: UFS storage + rootfs
+  (root device) toward launchd.
+
 ## Template for boot entries
 
 ### Boot NNN — YYYY-MM-DD HH:MM
