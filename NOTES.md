@@ -271,10 +271,45 @@ of each day's section. Log excerpts belong here, not in issues.
   stops after this frame (root device does not exist yet —
   that is Gate 3), and the XNUELTE1 marker has not been
   read back.
-- Next: recovery -> read back marker 0x8F007F000 (expect
-  XNUELTE1) + pmsg klog 0x8F0100000 via /dev/mem (route
-  unverified; try it). Then Gate 3: UFS storage + rootfs
-  (root device) toward launchd.
+- Stall + read-back follow-up (2026-11-11 ~11:31 MST):
+  a second owner photo ~2 min after reboot shows the SAME
+  last line (`IOKit IOMD setownership ENABLED`); the
+  console stream stopped there — no panic banner, no
+  root-device wait loop. Recovery read-back of the marker
+  and klog was attempted and is NOT possible from Lineage
+  recovery: /dev/mem does not exist (mknod gives ENXIO —
+  the recovery kernel has no usable devmem), /proc/kcore
+  absent, and /sys/fs/pstore's console/pmsg files hold
+  ANDROID's logs from Samsung's own ramoops region, not
+  our 0x8F0000000/0x8F0100000 zones (pulled copies in
+  boot-logs/, they show SELinux/adbd/sec_reboot content).
+  Our zones have no read channel from recovery; a reader
+  would need our own payload in BOOT, and DRAM survival
+  across the forced power-off is doubtful, so the attempt
+  stops here by decision, not by wall. Impact: low — the
+  FB console mirrors the same stream the pmsg klog would
+  hold, and it ends at the IOKit line; the open question
+  is what the CPU waits on after IOKit setownership
+  (timer/interrupt delivery is the standing hypothesis),
+  which no log tail could have answered anyway.
+- Gate 3 diagnostics (2026-11-11, later): the SWEETLOG
+  check discriminates where the stall is. Patch 0047's
+  flusher writes a SWEETLOG header + ring to the root
+  partition's tail once the partition is known+writable;
+  userdata's last 8 MiB read from recovery contains ZERO
+  SWEET strings, and strings on the built kernel prove the
+  UFS driver + SWEETLOG are compiled in (incl. our own
+  'SWEET UFS: no /gta4xlwifi-ufs node' message). So Boot
+  002 never reached UFS init: stall is between IOKit init
+  and the root-device path. Timer audit: our vtimer INTID
+  30 + A5_USE_PHYS_TIMER mirrors dreamlte exactly (CNTP,
+  PPI 14) — not a mismatch; interrupt delivery in general
+  remains the leading hypothesis class. Full plan:
+  research/GATE3-DESIGN.md (Step 1 = one instrumented
+  kernel build to bisect the stall; Step 2 = HFSX rootfs
+  on the M2 mini, full userland fits our 52 GiB userdata;
+  Step 3 = userdata write, destructive, owner's explicit
+  call, backup offered first).
 
 ## Template for boot entries
 
