@@ -207,6 +207,37 @@ of each day's section. Log excerpts belong here, not in issues.
   recovery -> flash -> photo -> recovery -> marker read-back
   via /dev/mem (fallback: photo evidence only).
 
+## 2026-11-11 — Gate 2 smoke test
+
+### Boot 001 — 2026-11-11 ~11:23 MST
+- Build: shim v1 loader (46,192 B) + dummy SWEETXNU payload
+  (stub.bin 576 B); boot-loader-smoke.img sha256 5a70c55d...
+- Change vs last boot: first loader test; replaces the shim
+  v0.1 probe in BOOT. Zero XNU involvement by design.
+- Procedure: GATE2-SESSION-RUNBOOK.md followed exactly. The
+  battery gate caught a flat battery on 2026-11-10
+  (voltage_now 3.446 V — the tablet had drained running the
+  v0.1 probe screen; note capacity reads 0 in Lineage
+  recovery, voltage_now is the truthful gauge). Session held
+  overnight on charge; 2026-11-11 battery Full, 4.351 V.
+  Gates passed in order: staged file re-verified on the MSI,
+  /tmp copy sha256-verified on the tablet, by-name/boot
+  confirmed = sda12, dd 47+0 records (192,512 B), read-back
+  prefix (47 blocks) hash matched, then reboot.
+- Result: **SMOKE TEST PASSED.** Owner photo: full-screen
+  diagonal cyan/magenta bands. That IS the stub's pattern —
+  colour = parity of (x+y)>>7, so the math draws diagonal
+  bands; the "checkerboard" wording in stub.S and the
+  2026-11-09 note above was loose. Proves the whole loader
+  handoff: S-Boot -> loader -> SWEETXNU discovery in the
+  ramdisk slot -> segment copy -> ADT/boot_args placement ->
+  jump -> stub executed, painted the FB, parked. DUMMYOK!
+  marker read-back not attempted (photo already proves
+  execution; marker check stays optional).
+- Next: back to recovery, flash boot-loader-xnu.img
+  (Boot 002); success = XNUELTE1 marker / Darwin banner
+  reaching platform-expert init.
+
 ## Template for boot entries
 
 ### Boot NNN — YYYY-MM-DD HH:MM
